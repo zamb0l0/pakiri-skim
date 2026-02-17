@@ -66,16 +66,24 @@ def get_color_class(xi, period, direction):
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Ledge Forecast")
-# Group by day to find the best window each day
+
+# 1. Update aggregation to include period and direction so the function has them
 df['date'] = df['time'].dt.strftime('%a, %b %d')
-daily_summary = df.groupby('date').agg({'xi': 'max', 'swell_wave_height': 'mean', 'swell_wave_period': 'mean'}).reindex(df['date'].unique())
+daily_summary = df.groupby('date').agg({
+    'xi': 'max', 
+    'swell_wave_height': 'mean', 
+    'swell_wave_period': 'max',      # We want the peak period of the day
+    'swell_wave_direction': 'mean'   # Average direction for the day
+}).reindex(df['date'].unique())
 
 cols = st.columns(5) # Row 1
 cols2 = st.columns(5) # Row 2
 all_cols = cols + cols2
 
 for i, (date, row) in enumerate(daily_summary.iterrows()):
-    color_class, label = get_color_class(row['xi'])
+    # 2. PASS ALL THREE: xi, swell_wave_period, and swell_wave_direction
+    color_class, label = get_color_class(row['xi'], row['swell_wave_period'], row['swell_wave_direction'])
+    
     with all_cols[i]:
         st.markdown(f"""
             <div class="card {color_class}">
@@ -84,7 +92,7 @@ for i, (date, row) in enumerate(daily_summary.iterrows()):
                 <small>{label}</small>
             </div>
             """, unsafe_allow_html=True)
-        st.caption(f"Avg: {row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s")
+        st.caption(f"Peak: {row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s")
 
 # --- INTERACTIVE CHART ---
 st.divider()
