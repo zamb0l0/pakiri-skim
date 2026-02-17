@@ -48,13 +48,21 @@ def get_full_forecast():
 df = get_full_forecast()
 
 # --- TRAFFIC LIGHT LOGIC ---
-def get_color_class(xi):
-    if xi > 1.6: return "bg-blue", "BEST EVER (Feb 8th Style)"
+def get_color_class(xi, period, direction):
+    # 🔵 BLUE: The "Dec 8th" Berm (Long Period + High Iribarren)
+    if xi > 1.6 and period > 13:
+        return "bg-blue", "🏆 BEST EVER (Dec 8th Berm)"
+    
+    # 🌀 CYAN: The "Oct 5th" Peeler (North Swell + Rivermouth Bank)
+    if direction < 45 and xi > 1.1:
+        return "bg-blue", "🌪️ RIVERMOUTH WRAP (Oct 5th Mode)"
+    
+    # Standard Traffic Lights
     if xi > 1.2: return "bg-darkgreen", "GOLDEN LEDGE"
     if xi > 0.9: return "bg-lightgreen", "GOOD"
     if xi > 0.7: return "bg-yellow", "AVERAGE"
     if xi > 0.4: return "bg-orange", "MUSH"
-    return "bg-red", "FLAT / WASHED OUT"
+    return "bg-red", "FLAT"
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Ledge Forecast")
