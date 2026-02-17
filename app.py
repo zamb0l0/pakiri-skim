@@ -3,61 +3,84 @@ import requests
 import pandas as pd
 import numpy as np
 import plotly.express as px
+from datetime import datetime
 
 st.set_page_config(page_title="Pakiri Ledge Watch", page_icon="🌊", layout="wide")
 
-st.title("🌊 Pakiri Ledge Dashboard")
+# --- CUSTOM CSS FOR TRAFFIC LIGHTS ---
+st.markdown("""
+    <style>
+    .reportview-container .main .block-container{ max-width: 1200px; }
+    .stMetric { background-color: #f0f2f6; padding: 10px; border-radius: 10px; }
+    .card { padding: 15px; border-radius: 10px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; }
+    .bg-red { background-color: #ff4b4b; }
+    .bg-orange { background-color: #ffa500; }
+    .bg-yellow { background-color: #ffff00; color: black !important; }
+    .bg-lightgreen { background-color: #90ee90; color: black !important; }
+    .bg-darkgreen { background-color: #008000; }
+    .bg-blue { background-color: #0000ff; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- 1. Sidebar & Calibration ---
+st.title("🌊 Pakiri Ledge Command Center")
+
+# --- SIDEBAR & CALIBRATION ---
 with st.sidebar:
     st.header("🎛️ Calibration")
     slope = st.slider("Beach Slope (tan beta)", 0.02, 0.15, 0.0371, format="%.4f")
-    st.info("Feb 8th Gold Standard: 0.1200")
-    
     st.header("📸 Session Log")
-    uploaded_file = st.file_uploader("Upload a photo of the ledge", type=['jpg', 'png'])
-    if uploaded_file:
-        st.image(uploaded_file, caption="Current Shorebreak State")
+    uploaded_file = st.file_uploader("Drop a photo to log the bank", type=['jpg', 'png'])
 
-# --- 2. Live Data Fetch ---
+# --- DATA FETCHING (WAVES + WIND) ---
 @st.cache_data(ttl=3600)
-def get_extended_forecast():
-    # Fetching 10 days of forecast data
-    url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period&forecast_days=10&timezone=auto"
-    data = requests.get(url).json()
-    df = pd.DataFrame(data['hourly'])
+def get_full_forecast():
+    # Fetching 10 days of swell and wind
+    url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
+    res = requests.get(url).json()
+    df = pd.DataFrame(res['hourly'])
     df['time'] = pd.to_datetime(df['time'])
     
-    # Calculate Iribarren for every hour in the forecast
-    # L0 = (g * T^2) / 2pi
+    # Iribarren Logic
     df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
-    df['iribarren'] = slope / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
+    df['xi'] = slope / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
     return df
 
-df_forecast = get_extended_forecast()
+df = get_full_forecast()
 
-# --- 3. Current Conditions Metrics ---
-current = df_forecast.iloc[0]
-c1, c2, c3 = st.columns(3)
-c1.metric("Current Swell", f"{current['swell_wave_height']}m")
-c2.metric("Current Period", f"{current['swell_wave_period']}s")
-c3.metric("Iribarren (ξ)", f"{current['iribarren']:.2f}")
+# --- TRAFFIC LIGHT LOGIC ---
+def get_color_class(xi):
+    if xi > 1.6: return "bg-blue", "BEST EVER (Feb 8th Style)"
+    if xi > 1.2: return "bg-darkgreen", "GOLDEN LEDGE"
+    if xi > 0.9: return "bg-lightgreen", "GOOD"
+    if xi > 0.7: return "bg-yellow", "AVERAGE"
+    if xi > 0.4: return "bg-orange", "MUSH"
+    return "bg-red", "FLAT / WASHED OUT"
 
-# --- 4. The 10-Day Trend Chart ---
-st.subheader("📈 10-Day Ledge Forecast")
-fig = px.line(df_forecast, x='time', y='iribarren', 
-              title="Predicted Ledge Quality (Iribarren Number Over Time)",
-              labels={'iribarren': 'Iribarren Number (ξ)', 'time': 'Date'})
+# --- 10-DAY GRID ---
+st.subheader("🗓️ 10-Day Ledge Forecast")
+# Group by day to find the best window each day
+df['date'] = df['time'].dt.strftime('%a, %b %d')
+daily_summary = df.groupby('date').agg({'xi': 'max', 'swell_wave_height': 'mean', 'swell_wave_period': 'mean'}).reindex(df['date'].unique())
 
-# Add a 'Golden Zone' reference line
-fig.add_hline(y=1.2, line_dash="dash", line_color="gold", annotation_text="Golden Ledge Zone")
-fig.update_layout(hovermode="x unified")
+cols = st.columns(5) # Row 1
+cols2 = st.columns(5) # Row 2
+all_cols = cols + cols2
+
+for i, (date, row) in enumerate(daily_summary.iterrows()):
+    color_class, label = get_color_class(row['xi'])
+    with all_cols[i]:
+        st.markdown(f"""
+            <div class="card {color_class}">
+                {date}<br>
+                <span style="font-size: 1.5em;">ξ {row['xi']:.2f}</span><br>
+                <small>{label}</small>
+            </div>
+            """, unsafe_allow_html=True)
+        st.caption(f"Avg: {row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s")
+
+# --- INTERACTIVE CHART ---
+st.divider()
+st.subheader("📈 Detailed Hourly Trend")
+fig = px.area(df, x='time', y='xi', title="Ledge Quality (Iribarren Number)")
+fig.add_hline(y=1.2, line_dash="dash", line_color="gold", annotation_text="Golden Zone")
 st.plotly_chart(fig, use_container_width=True)
-
-# --- 5. Session Verdict ---
-if current['iribarren'] > 1.2:
-    st.success("🚀 **STATUS: GOLDEN.** The ledge is vertical. Go now!")
-elif current['iribarren'] > 0.7:
-    st.warning("🏄 **STATUS: INTERMEDIATE.** Shorebreak is active but might be soft.")
-else:
-    st.error("💨 **STATUS: WASHED OUT.** Too flat for skimming.")
