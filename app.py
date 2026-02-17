@@ -2,59 +2,62 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
+import plotly.express as px
 
-st.set_page_config(page_title="Pakiri Ledge Watch", page_icon="🌊")
+st.set_page_config(page_title="Pakiri Ledge Watch", page_icon="🌊", layout="wide")
 
-# --- UI HEADER ---
-st.title("🌊 Pakiri Ledge Forecast")
-st.write("Predicting 'Feb 8th' magic based on live swell data.")
+st.title("🌊 Pakiri Ledge Dashboard")
 
-# --- SIDEBAR SETTINGS ---
+# --- 1. Sidebar & Calibration ---
 with st.sidebar:
     st.header("🎛️ Calibration")
-    # This is the 'Slope' you found in your analysis
-    slope = st.slider("Current Beach Slope", 0.02, 0.15, 0.0371, format="%.4f")
-    st.info("Feb 8th was ~0.1200")
+    slope = st.slider("Beach Slope (tan beta)", 0.02, 0.15, 0.0371, format="%.4f")
+    st.info("Feb 8th Gold Standard: 0.1200")
+    
+    st.header("📸 Session Log")
+    uploaded_file = st.file_uploader("Upload a photo of the ledge", type=['jpg', 'png'])
+    if uploaded_file:
+        st.image(uploaded_file, caption="Current Shorebreak State")
 
-# --- DATA FETCHING ---
+# --- 2. Live Data Fetch ---
 @st.cache_data(ttl=3600)
-def get_data():
-    url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period&timezone=auto"
-    res = requests.get(url).json()
-    return pd.DataFrame(res['hourly'])
-
-df = get_data()
-
-if not df.empty:
-    # Current Conditions
-    h = df['swell_wave_height'][0]
-    t = df['swell_wave_period'][0]
+def get_extended_forecast():
+    # Fetching 10 days of forecast data
+    url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period&forecast_days=10&timezone=auto"
+    data = requests.get(url).json()
+    df = pd.DataFrame(data['hourly'])
+    df['time'] = pd.to_datetime(df['time'])
     
-    # Iribarren Logic
-    L0 = (9.81 * (t**2)) / (2 * np.pi)
-    xi = slope / (np.sqrt(h / L0))
-    
-    # 48-Hour Accretion Logic (Is the ledge building right now?)
-    recent_h = df['swell_wave_height'].iloc[:48].mean()
-    recent_t = df['swell_wave_period'].iloc[:48].mean()
-    building = "✅ Building" if recent_h < 1.0 and recent_t > 10 else "❌ Eroding"
+    # Calculate Iribarren for every hour in the forecast
+    # L0 = (g * T^2) / 2pi
+    df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
+    df['iribarren'] = slope / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
+    return df
 
-    # --- DASHBOARD ---
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Swell", f"{h}m")
-    c2.metric("Period", f"{t}s")
-    c3.metric("Iribarren (ξ)", f"{xi:.2f}")
+df_forecast = get_extended_forecast()
 
-    st.subheader(f"Current Status: {building}")
-    
-    if xi > 1.2:
-        st.success("🚀 **GOLDEN SESSION:** Ledge is active. Heavy vertical wedges.")
-    elif xi > 0.7:
-        st.warning("🏄 **INTERMEDIATE:** Bank is holding. Possible side-wash.")
-    else:
-        st.error("💨 **WASHED OUT:** Beach is too shallow. Wait for smaller/longer swell.")
+# --- 3. Current Conditions Metrics ---
+current = df_forecast.iloc[0]
+c1, c2, c3 = st.columns(3)
+c1.metric("Current Swell", f"{current['swell_wave_height']}m")
+c2.metric("Current Period", f"{current['swell_wave_period']}s")
+c3.metric("Iribarren (ξ)", f"{current['iribarren']:.2f}")
 
-    st.divider()
-    st.write("### 📅 Sunday Feb 22 Strategy")
-    st.write("**High Tide:** 11:33 AM (2.4m)")
-    st.write("**Best Window:** 10:00 AM - 12:30 PM")
+# --- 4. The 10-Day Trend Chart ---
+st.subheader("📈 10-Day Ledge Forecast")
+fig = px.line(df_forecast, x='time', y='iribarren', 
+              title="Predicted Ledge Quality (Iribarren Number Over Time)",
+              labels={'iribarren': 'Iribarren Number (ξ)', 'time': 'Date'})
+
+# Add a 'Golden Zone' reference line
+fig.add_hline(y=1.2, line_dash="dash", line_color="gold", annotation_text="Golden Ledge Zone")
+fig.update_layout(hovermode="x unified")
+st.plotly_chart(fig, use_container_width=True)
+
+# --- 5. Session Verdict ---
+if current['iribarren'] > 1.2:
+    st.success("🚀 **STATUS: GOLDEN.** The ledge is vertical. Go now!")
+elif current['iribarren'] > 0.7:
+    st.warning("🏄 **STATUS: INTERMEDIATE.** Shorebreak is active but might be soft.")
+else:
+    st.error("💨 **STATUS: WASHED OUT.** Too flat for skimming.")
