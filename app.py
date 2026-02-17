@@ -1,37 +1,60 @@
 import streamlit as st
 import requests
 import pandas as pd
+import numpy as np
 
 st.set_page_config(page_title="Pakiri Ledge Watch", page_icon="🌊")
 
 st.title("🌊 Pakiri Ledge Forecast")
-st.write("Predicting the 'Feb 8th' magic based on beach slope and wave energy.")
+st.write("Predicting 'Feb 8th' magic based on live swell data.")
 
-# --- INPUT SECTION ---
+# --- 1. Sidebar Inputs ---
 with st.sidebar:
-    st.header("Settings")
-    # You can update this once a week when you run CoastSat
+    st.header("Beach State")
+    # Using your current slope from the analysis
     current_slope = st.slider("Current Beach Slope (tan beta)", 0.02, 0.15, 0.0371)
-    memory_score = st.number_input("Starting Memory Score", value=-10)
+    st.info(f"0.10+ = Reflective (Ledge)\n0.04- = Dissipative (Flat)")
 
-# --- LIVE DATA FETCH ---
-@st.cache_data(ttl=3600) # Only fetch data once per hour
-def get_marine_forecast():
-    url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period&timezone=auto"
-    return pd.DataFrame(requests.get(url).json()['hourly'])
+# --- 2. Live Data Fetch ---
+@st.cache_data(ttl=3600)
+def get_marine_data():
+    lat, lon = -36.26, 174.78
+    url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=swell_wave_height,swell_wave_period&timezone=auto"
+    try:
+        data = requests.get(url).json()
+        return pd.DataFrame(data['hourly'])
+    except:
+        return pd.DataFrame()
 
-df = get_marine_forecast()
+df = get_marine_data()
 
-# --- LEDGE CALCULATION ---
-# (Apply the logic we built previously)
-# ... [Ledge builder logic goes here] ...
+# --- 3. The Logic (The Fix is here!) ---
+if not df.empty:
+    # Get the next available swell (index 0 is current hour)
+    h = df['swell_wave_height'][0]
+    t = df['swell_wave_period'][0]
+    
+    # Calculate Iribarren Number (xi)
+    # Formula: xi = slope / sqrt(height / wavelength)
+    # Wavelength L = (g * T^2) / 2pi
+    wavelength = (9.81 * (t**2)) / (2 * np.pi)
+    predicted_xi = current_slope / ((h / wavelength)**0.5)
 
-# --- THE RESULTS DIAL ---
-st.metric(label="Predicted Iribarren Number", value=f"{predicted_xi:.2f}")
+    # --- 4. Display Results ---
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Swell Height", f"{h}m")
+    col2.metric("Swell Period", f"{t}s")
+    col3.metric("Iribarren (ξ)", f"{predicted_xi:.2f}")
 
-if predicted_xi > 1.5:
-    st.success("🚀 STATUS: GOLDEN SESSION. Go now.")
-elif predicted_xi > 0.8:
-    st.warning("🏄 STATUS: MODERATE. Ledge is thin but working.")
+    st.divider()
+
+    if predicted_xi > 1.2:
+        st.success("🚀 **GOLDEN SESSION:** Ledge is active. Heavy wedges expected.")
+    elif predicted_xi > 0.7:
+        st.warning("🏄 **INTERMEDIATE:** Bank is holding. Possible skimming.")
+    else:
+        st.error("💨 **WASHED OUT:** The beach is too flat for this swell.")
+        
+    st.caption(f"Based on current conditions: {h}m @ {t}s")
 else:
-    st.error("💨 STATUS: FLAT. Stay home, sand is washed out.")
+    st.error("Unable to fetch live swell data. Check your internet connection!")
