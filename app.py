@@ -22,7 +22,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🌊 Pakiri Skim Forecast - Beach Gradient Inclusive")
+st.title("Pakiri Skim Forecast - Beach Gradient Inclusive")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -151,197 +151,196 @@ with g_col2:
     """)
 st.divider()
 
-# --- PARAMETRIC "HOLLOW" WAVE ENGINE (FIXED & WATERTIGHT) ---
-st.subheader("🌀 Pakiri Ledge: Hollow Barrel & Recede")
+import numpy as np
+import plotly.graph_objects as go
+import streamlit as st
 
-# 1. The Organic Bank
-x_range = np.linspace(0, 60, 300)
-y_sand = 4 / (1 + np.exp(-0.2 * (x_range - 38)))
+# --- 1. SETUP ---
+# Doubled frames to 120 and slowed duration to 50ms for "half speed"
+# Slowed down: 120 frames at 50ms = 6 second cycle
+n_frames = 120 
+x_base = np.linspace(0, 60, 150)
+x_base = np.linspace(0, 60, 200)
+
+# The Bank (Static)
+y_sand = 4 / (1 + np.exp(-0.25 * (x_base - 42)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
-# Add seafloor corners for a solid fill
-x_poly = np.concatenate([[0], x_range, [60, 0]])
 
-current_tide = now_data['tide_level']
+# Get current data
 h_s = now_data['swell_wave_height']
-xi = now_data['xi']
+xi = now_data['xi']  # Iribarren number
+xi = now_data['xi'] 
+tide = now_data['tide_level']
 
-n_frames = 100
 frames = []
 
-# --- RE-ENGINEERED ANIMATION LOOP ---
 for i in range(n_frames):
     t = i / n_frames
-    display_y = np.full_like(x_range, current_tide)
-    foam_x, foam_y, spray_x, spray_y = [], [], [], []
 
-    # --- STAGES B-D: THE SHOAL ---
-    # 1. THE SHOAL (Stages B-D)
+    # Define the core "Water Path"
+    # We build this as a list of (x, y) points to allow overhangs
+    # We build a single closed loop for the water
+    path_x = []
+    path_y = []
+
+    # --- PHASE 1: THE GROWING LUMP (0.0 - 0.3) ---
     if t < 0.3:
-        progress = t / 0.3
-        crest_x = progress * 30
-        # Steep front face, gentle back (Trochoid approximation)
-        for j, x in enumerate(x_range):
-            dist = x - crest_x
-            if dist < 0:
-                display_y[j] = current_tide + h_s * np.exp(0.1 * dist)
-            else:
-                display_y[j] = current_tide + h_s * np.exp(-0.4 * dist)
-            # Asymmetric face: steep front, trailing back
-            display_y[j] = current_tide + h_s * (np.exp(0.12 * dist) if dist < 0 else np.exp(-0.45 * dist))
+        p = t / 0.3
+        crest_x = p * 35
+        amp = tide + (h_s * (1 + p * 0.4))
+    # --- STAGES B-D: THE ROUND LUMP (0.0 - 0.4) ---
+    if t < 0.4:
+        p = t / 0.4
+        crest_x = p * 40
+        amp = h_s * (1 + p * 0.5)
+        # Rounder lump using Gaussian curve
+        width = 8 - (p * 4) 
 
-    # --- STAGES E-G: THE PLUNGING LIP (THE "THROW") ---
-    # 2. THE PLUNGE (Stages E-G: The "Throw")
-    elif t < 0.65:
-        progress = (t - 0.3) / 0.35
-        crest_x = 30 + (progress * 10)
+        # Draw a rounded hump
+        path_x = list(x_base)
+        path_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * (7-p*2)**2))) 
+                  for j, x in enumerate(x_base)]
 
-        # Base Wave Body
-        # Base water level
-        for j, x in enumerate(x_range):
-            dist = x - crest_x
-            display_y[j] = current_tide + h_s * np.exp(-0.5 * abs(dist)) if dist > 0 else current_tide + h_s * np.exp(0.1 * dist)
+    # --- PHASE 2: THE PITCHING BARREL (0.3 - 0.7) ---
+    elif t < 0.7:
+        p = (t - 0.3) / 0.4
+        crest_x = 35 + (p * 5)
+        amp = tide + (h_s * 1.4)
+        # Build surface
+        surface_x = list(x_base)
+        surface_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * width**2))) 
+                     for j, x in enumerate(x_base)]
+        path_x, path_y = surface_x, surface_y
 
-        # The Projectile Lip (Geometry from your diagram)
-        # It curves out and then down
-        lip_x_base = crest_x
-        # Throw distance based on Iribarren (xi)
-        throw = progress * (xi * 4) 
-        drop = 5 * (progress**2) # Gravity acceleration
-            display_y[j] = current_tide + h_s * (np.exp(0.1 * dist) if dist < 0 else np.exp(-0.6 * dist))
+    # --- STAGES E-G: THE PITCHING BARREL (0.4 - 0.75) ---
+    elif t < 0.75:
+        p = (t - 0.4) / 0.35
+        crest_x = 40 + (p * 5)
+        amp = h_s * 1.6
 
-        # Projectile Lip Geometry
-        # The lip is projected forward based on Iribarren number (xi)
-        throw_power = progress * (xi * 4.5)
-        gravity_drop = 6 * (progress**2)
+        # 1. Back of wave (Normal curve)
+        back_x = np.linspace(0, crest_x, 50)
+        back_y = [max(np.interp(x, x_base, y_sand), tide + (amp-tide) * np.exp(-((x - crest_x)**2) / (2 * 6**2))) 
+        # 1. Back of wave
+        back_x = np.linspace(0, crest_x, 80)
+        back_y = [max(np.interp(x, x_base, y_sand), tide + amp * np.exp(-((x - crest_x)**2) / (2 * 6**2))) 
+                  for x in back_x]
 
-        phi = np.linspace(0, np.pi * 0.9, 30)
-        spray_x = lip_x_base + (throw * np.sin(phi/1.5))
-        spray_y = (current_tide + h_s) - drop + (h_s * 0.2 * np.cos(phi))
-        # Parametric arc for the "C" shape barrel
-        phi = np.linspace(0, np.pi * 0.95, 40)
-        spray_x = crest_x + (throw_power * np.sin(phi/1.4))
-        spray_y = (current_tide + h_s) - gravity_drop + (h_s * 0.25 * np.cos(phi))
+        # 2. The Pitching Lip (Parametric "C" Shape)
+        # Higher xi = further throw
+        throw = p * (xi * 5)
+        drop = 7 * (p**1.5)
+        
+        # Theta creates the 'hollow' curve
+        theta = np.linspace(0, np.pi * 1.1, 30)
+        # Radius of the barrel tube
+        r = (h_s * 0.6) 
+        
+        lip_x = crest_x + (throw * p) + r * np.sin(theta)
+        lip_y = amp - (drop * p) + r * np.cos(theta)
+        # 2. The Overhanging Lip (The 'C' Curve)
+        # Higher Iribarren (xi) = More 'Throw' forward
+        throw = p * (xi * 6)
+        drop = 8 * (p**1.8)
+        phi = np.linspace(0, np.pi * 1.1, 40) # This creates the loop
+        r = (h_s * 0.7) # Radius of the barrel
 
-        # Offshore spray (Wind effect)
-        if now_data['wind_speed'] > 15 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S']:
-            spray_x = np.append(spray_x, [crest_x - 2, crest_x - 5])
-            spray_y = np.append(spray_y, [current_tide + h_s + 0.5, current_tide + h_s + 1.2])
-        # Offshore spray lines (Wind-blown)
-        if now_data['wind_speed'] > 14 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S']:
-            spray_x = np.append(spray_x, [crest_x - 1, crest_x - 4])
-            spray_y = np.append(spray_y, [current_tide + h_s + 0.4, current_tide + h_s + 1.0])
+        # 3. Combine paths
+        path_x = list(back_x) + list(lip_x)
+        path_y = list(back_y) + list(lip_y)
+        lip_x = crest_x + (throw) + r * np.sin(phi)
+        lip_y = (tide + amp) - drop + r * np.cos(phi)
 
-    # --- STAGE H: IMPACT & THINNING SWASH ---
-    # 3. IMPACT & LINGERING WHITEWASH (Stage H)
-    elif t < 0.85:
-        progress = (t - 0.65) / 0.2
-        impact_x = 40
-        swash_reach = (h_s * 15) * np.sin(progress * (np.pi/2))
-        # Swash moves fast initially, then slows
-        swash_reach = (h_s * 16) * np.sin(progress * (np.pi/2))
+        # Add the remaining shore (water sitting on sand)
+        shore_x = np.linspace(max(lip_x), 60, 50)
+        # 3. Connection to shore
+        shore_x = np.linspace(max(lip_x), 60, 80)
+        shore_y = [np.interp(x, x_base, y_sand) for x in shore_x]
+        path_x += list(shore_x)
+        path_y += list(shore_y)
+        
+        path_x = list(back_x) + list(lip_x) + list(shore_x)
+        path_y = list(back_y) + list(lip_y) + list(shore_y)
 
-        # The "Sheet" of water following the sand slope
-        mask = (x_range >= impact_x) & (x_range <= impact_x + swash_reach)
-        # Water thins out as it reaches max height
-        thickness = 0.25 * (1 - (progress * 0.8))
-        # Water thins out as it flows up the bank
-        thickness = 0.3 * (1 - (progress * 0.75))
-        display_y[mask] = y_sand[mask] + thickness
-
-        # Whitewash / Foam Clusters
-        foam_x = np.random.uniform(impact_x, impact_x + swash_reach, 25)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.2 for val in foam_x]
-        # Whitewash particle cluster
-        foam_x = np.random.uniform(impact_x - 2, impact_x + swash_reach, 30)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.25 for val in foam_x]
-
-    # --- THE RECEDE (BACKWASH) ---
-    # 4. THE SUCK-BACK (Backwash)
+    # --- PHASE 3: THE REFLECTION / SWASH (0.7 - 1.0) ---
+    # --- STAGE H: REFLECTION & SWASH (0.75 - 1.0) ---
     else:
-        progress = (t - 0.85) / 0.15
-        reach = (h_s * 15) * (1 - progress)
-        reach = (h_s * 16) * (1 - progress)
-        mask = (x_range >= 38) & (x_range <= 40 + reach)
-        display_y[mask] = y_sand[mask] + 0.05
-        display_y[mask] = y_sand[mask] + 0.08
+        p = (t - 0.7) / 0.3
+        p = (t - 0.75) / 0.25
+        impact_x = 42
+        # Surge up the bank
+        # Surge and Reflect
+        reach = (h_s * 15) * np.sin(p * np.pi)
 
-        foam_x = np.random.uniform(38, 40 + reach, 10)
-        # Lingering bubbles on the sand
-        foam_x = np.random.uniform(38, 40 + reach, 12)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.05 for val in foam_x]
+        path_x = list(x_base)
+        path_y = []
+        for j, x in enumerate(x_base):
+            if x < impact_x:
+                path_y.append(max(y_sand[j], tide + (h_s * 0.2 * (1-p))))
+                path_y.append(max(y_sand[j], tide + (h_s * 0.1 * (1-p))))
+            elif impact_x <= x <= impact_x + reach:
+                # Water reflecting/thinning on bank
+                path_y.append(y_sand[j] + (0.3 * (1-p)))
+                path_y.append(y_sand[j] + (0.3 * (1-p))) # Thin swash sheet
+            else:
+                path_y.append(y_sand[j])
 
-    # Final "Watertight" Geometry
-    # Final "Watertight" Geometry for Polygon
-    y_capped = np.maximum(y_sand, display_y)
-    y_poly = np.concatenate([[0], y_capped, [0, 0]])
+    # --- CREATE THE SOLID POLYGONS ---
+    # We close the water path by going back along the bottom to the start
+    water_fill_x = path_x + [60, 0]
+    water_fill_y = path_y + [0, 0]
+    
+    # We close the sand path
+    sand_fill_x = list(x_base) + [60, 0]
+    sand_fill_y = list(y_sand) + [0, 0]
+    # --- CLOSE THE POLYGON (Avoid water under sand) ---
+    # We go from the end of the surface, down to 0, back to start, and up
+    full_x = path_x + [60, 0]
+    full_y = path_y + [0, 0]
 
     frames.append(go.Frame(
         data=[
-            go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
-            go.Scatter(x=x_poly, y=y_poly, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Ocean"),
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=np.random.randint(2, 6), opacity=0.6), showlegend=False),
-            # The Sandbank
-            go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', 
-                       line=dict(color='#C2B280', width=2.5), name="Bank", hoverinfo='skip'),
-            # The Water Body
-            go.Scatter(x=x_poly, y=y_poly, fill='toself', 
-                       line=dict(color='rgba(41, 128, 185, 0.9)', width=0), name="Ocean", hoverinfo='skip'),
-            # The Whitewash (Particles)
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', 
-                       marker=dict(color='white', size=np.random.randint(3, 7), opacity=0.7), showlegend=False),
-            # The Plunging Lip & Spray
-            go.Scatter(x=spray_x, y=spray_y, mode='lines+markers' if t < 0.65 else 'markers', 
-                       marker=dict(color='white', size=2), line=dict(color='white', width=3), showlegend=False)
-                       marker=dict(color='white', size=2), line=dict(color='white', width=4), showlegend=False)
+            # SAND (Bottom Layer)
+            go.Scatter(x=sand_fill_x, y=sand_fill_y, fill='toself', 
+            # Sand Layer (Drawn first)
+            go.Scatter(x=list(x_base) + [60, 0], y=list(y_sand) + [0, 0], fill='toself', 
+                       fillcolor='#C2B280', line=dict(color='#A68D60', width=1), hoverinfo='skip'),
+            # WATER (Top Layer)
+            go.Scatter(x=water_fill_x, y=water_fill_y, fill='toself', 
+            # Water Layer (Drawn on top)
+            go.Scatter(x=full_x, y=full_y, fill='toself', 
+                       fillcolor='rgba(0, 105, 148, 0.7)', line=dict(color='#006994', width=2), hoverinfo='skip')
         ],
         name=f'f{i}'
     ))
 
+# --- PLOT CONFIG ---
+# --- RENDER ---
 fig_ledge = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], showgrid=False, zeroline=False, fixedrange=True),
-        yaxis=dict(range=[0, 7], showgrid=False, zeroline=False, fixedrange=True),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Play Set Loop", method="animate", 
-                          args=[None, {"frame": {"duration": 30, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
-        plot_bgcolor='white', height=400
+        xaxis=dict(range=[0, 60], fixedrange=True, showgrid=False, zeroline=False),
+        yaxis=dict(range=[0, 8], fixedrange=True, showgrid=False, zeroline=False),
+        updatemenus=[{
+            "type": "buttons",
+            "buttons": [{
+                "label": "🌊 Play Slow-Mo Cycle",
+                "method": "animate",
+                "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]
+            }]
+        }],
+        plot_bgcolor='white',
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=400
+        yaxis=dict(range=[0, 9], fixedrange=True, showgrid=False, zeroline=False),
+        updatemenus=[{"type": "buttons", "buttons": [{"label": "🌊 Play Ledge Cycle", "method": "animate", 
+                     "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]}]}],
+        plot_bgcolor='white', height=450, margin=dict(l=0, r=0, t=0, b=0)
     ),
     frames=frames
 )
 
 st.plotly_chart(fig_ledge, use_container_width=True)
-# fig_barrel chart call removed to prevent NameError
-
-# --- 10-DAY GRID ---
-st.subheader("🗓️ 10-Day Skim Forecast")
-
-df['date_label'] = df['time'].dt.strftime('%a, %b %d')
-daily = df.groupby('date_label').agg({
-    'xi': 'max', 'swell_wave_height': 'mean', 
-    'swell_wave_period': 'max', 'swell_wave_direction': 'mean',
-    'wind_dir': 'mean', 'wind_speed': 'max', 'time': 'first', 'tide_level': 'max'
-}).reindex(df['date_label'].unique())
-
-cols = [st.columns(5), st.columns(5)]
-for i, (date, row) in enumerate(daily.iterrows()):
-    color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'], row['tide_level'])
-    tide_dt = get_high_tide_dt(row['time'])
-    session_start = (tide_dt - timedelta(hours=1)).strftime('%I:%M')
-    session_end = (tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')
-
-    with cols[i//5][i%5]:
-        st.markdown(f"""
-            <div class='card {color}'>
-                <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
-                <div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
-                <div style='font-size: 1.0em;'>🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s</div>
-                <div style='font-size: 0.85em; opacity: 0.9;'>Swell: {get_arrow_with_name(row['swell_wave_direction'])}</div>
-                <div style='font-size: 0.85em; opacity: 0.9;'>Wind: {get_arrow_with_name(row['wind_dir'])}</div>
-                <div class='session-time'>🎯 Best: {session_start} - {session_end}</div>
-                <hr style='margin:8px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
-                <div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
-            </div>
-            """, unsafe_allow_html=True)
 
 # --- SCROLLABLE CHART ---
 st.divider()
