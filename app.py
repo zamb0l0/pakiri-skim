@@ -53,12 +53,48 @@ with st.sidebar:
     st.subheader("📖 What is ξ (Iribarren)?")
     st.write(r"**The Iribarren Number** ($\xi$) describes how waves break. High $\xi$ (>1.5) means the beach is steep enough for a **Premium Ledge**.")
 
-# --- DATA FETCHING (Matched to Pakiri Specific Coordinates) ---
+# --- REFINED WIND ENGINE ---
+
+def get_wind_multiplier(deg, speed):
+    """Calculates a multiplier based on your specific Pakiri rules."""
+    # 1. Directional Logic: 135 to 315 is the 'Safe Zone'
+    if not (135 <= deg <= 315):
+        dir_mult = 0.5  # Heavy penalty for anything Onshore (N to E)
+    else:
+        # Sweet Spot Logic: The closer to 225, the better. 
+        # Being exactly at 225 gives a 20% boost (1.2).
+        offshore_error = abs(deg - 225)
+        dir_mult = 1.2 - (offshore_error / 450) # Very gradual decay from 225
+
+    # 2. Speed Logic
+    if speed < 5:
+        speed_mult = 1.3  # Amazing / Glassy
+    elif speed < 12:
+        speed_mult = 1.0  # Average
+    elif speed > 25:
+        speed_mult = 0.6  # Not too good / Blown out
+    else:
+        speed_mult = 0.8  # Moderate
+
+    return dir_mult * speed_mult
+
+def get_expert_score(xi, h, t, wind_deg, wind_speed, tide_h):
+    # Adjust xi by our wind multiplier
+    w_mult = get_wind_multiplier(wind_deg, wind_speed)
+    final_xi = xi * w_mult
+    
+    if wind_speed > 35: return "bg-purple", "⚠️ DANGER WIND"
+    
+    # Labeling based on wind-adjusted Iribarren
+    if final_xi > 1.6: return "bg-darkgreen", "PREMIUM"
+    if final_xi > 1.2: return "bg-lightgreen", "GOOD"
+    if final_xi > 0.8: return "bg-yellow", "AVERAGE"
+    return "bg-red", "WASHED OUT"
+
+# --- THE UPDATED DATA FETCHING FUNCTION ---
 @st.cache_data(ttl=3600)
 def get_full_data(current_slope):
-    # Wind data (GFS)
     w_url = f"https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LON}&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
-    # Swell data (MeteoFrance/LOTUS)
     m_url = f"https://marine-api.open-meteo.com/v1/marine?latitude={LAT}&longitude={LON}&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
     
     w_data = requests.get(w_url).json()['hourly']
@@ -68,27 +104,13 @@ def get_full_data(current_slope):
     df['wind_dir'] = w_data['wind_direction_10m']
     df['time'] = pd.to_datetime(df['time'])
     
-    # Tide Calculation (Reference: Feb 18, 2026, 08:15)
+    # Tide Calculation
     ref = datetime(2026, 2, 18, 8, 15)
     df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
     df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
     
-    # Ledge Physics Logic
-    tide_modifier = (df['tide_level'] - 1.2) / 2
-    df['dynamic_slope'] = current_slope * (1 + tide_modifier)
-    df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
-    
-    # Raw Iribarren
-    df['xi'] = df['dynamic_slope'] / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
-    
-    # Reflection Coefficient
-    df['R'] = (df['xi']**2) / (df['xi']**2 + 5) * 100
-    
-    # Wind Factor: Pakiri faces NE. NE (0-110 deg) is Onshore Penalty.
-    df['wind_factor'] = np.where((df['wind_dir'] > 0) & (df['wind_dir'] < 110), 0.65, 1.0)
-    df['final_score'] = df['xi'] * df['wind_factor']
-    
-    return df
+    # Physics Logic
+    tide
 
 df = get_full_data(slope)
 
