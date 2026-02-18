@@ -202,92 +202,93 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
+# --- HELPER: GEOMETRY ENGINE (RESTORING THE EXAGGERATION) ---
+def get_extreme_profile(slope_val, xi_val):
+    # POSITION: Move the 'Step' based on slope
+    mu = 90 - (slope_val * 90) 
+    
+    # SHAPE EXAGGERATION: xi ** 3.0 creates the massive visual difference 
+    # between a flat beach and a steep ledge.
+    sigma = 25 / (xi_val ** 3.0) 
+    
+    # 1. The Ledge Face (Gaussian curve)
+    y = 3.6 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    
+    # 2. The Rising Dune (Diagrammatic rise behind the ledge)
+    y = np.where(x_vals > mu, 3.6 + (0.012 * (x_vals - mu)), y)
+    
+    return y, mu
+
 # --- EXAGGERATED: BERM DYNAMICS (Architectural Style) ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Visuals are **highly exaggerated** to show daily variance. 💥 = Strike Zone.")
+st.write("Visuals are **highly exaggerated**. 💥 = Strike Zone. Dimension line measures Tide Height.")
 
-# 1. CRITICAL FIX: Ensure daily_geom is defined globally
+# Ensure data is grouped
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily_geom = df.groupby('date_label').agg({
-    'xi':'max', 
-    'tide_level':'max', 
-    'dynamic_slope':'max', 
-    'swell_wave_height':'mean', 
-    'wavelength':'mean', 
-    'R':'max'
+    'xi':'max', 'tide_level':'max', 'dynamic_slope':'max', 
+    'swell_wave_height':'mean', 'wavelength':'mean', 'R':'max'
 }).reindex(df['date_label'].unique())
 
 g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(10, 100, 150) # Smooth samples
+x_vals = np.linspace(10, 100, 150) # Increased for smooth spline
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     if pd.isna(row['xi']): continue
-    
     with g_cols[i//5][i%5]:
-        # Get the geometric points
+        # Call the restored geometry function
         y_vals, ledge_x = get_extreme_profile(row['dynamic_slope'], row['xi'])
         
-        # Calculate Slope Angle for the 'Architectural Arc'
-        # tan(theta) = slope -> theta = arctan(slope)
-        slope_deg = np.degrees(np.arctan(row['dynamic_slope'] * 15)) # 15x multiplier for visual exaggeration
+        # Calculate visual slope angle
+        slope_deg = np.degrees(np.arctan(row['dynamic_slope'] * 15)) 
         
         fig_mini = go.Figure()
 
-        # 1. SMOOTH FILLED PROFILE (Spline)
+        # 1. SMOOTH FILLED PROFILE (Blended Greens/Yellows)
         fig_mini.add_trace(go.Scatter(
             x=x_vals, y=y_vals,
             fill='tozeroy',
             mode='lines',
-            line=dict(width=2.5, color='#2ecc71', shape='spline', smoothing=1.3),
-            fillcolor='rgba(46, 204, 113, 0.15)', # Light Green
+            line=dict(width=3, color='#2ecc71', shape='spline', smoothing=1.3),
+            fillcolor='rgba(46, 204, 113, 0.2)', # Softer Green
             hoverinfo='none'
         ))
 
-        # 2. THE TIDE PLANE
+        # 2. THE TIDE PLANE (Soft Blue)
         fig_mini.add_trace(go.Scatter(
             x=[10, 100], y=[row['tide_level'], row['tide_level']],
-            line=dict(color='rgba(0, 183, 255, 0.4)', width=2),
+            line=dict(color='rgba(52, 152, 219, 0.5)', width=2),
             mode='lines', hoverinfo='none'
         ))
 
-        # 3. ARCHITECTURAL DIMENSION (Vertical Tide Line)
-        dim_x = 18
+        # 3. ARCHITECTURAL DIMENSION LINE (Vertical Tide Measure)
+        dim_x = 15
         fig_mini.add_trace(go.Scatter(
             x=[dim_x, dim_x], y=[0, row['tide_level']],
             mode='lines',
-            line=dict(color='black', width=0.8),
+            line=dict(color='#2c3e50', width=1),
             hoverinfo='none'
         ))
-        # Add the 'ticks' on the dimension line
+        # Ticks for dimension line
         fig_mini.add_trace(go.Scatter(
             x=[dim_x-2, dim_x+2, None, dim_x-2, dim_x+2],
             y=[0, 0, None, row['tide_level'], row['tide_level']],
-            mode='lines', line=dict(color='black', width=0.8), hoverinfo='none'
+            mode='lines', line=dict(color='#2c3e50', width=1), hoverinfo='none'
         ))
 
-        # 4. SLOPE ANGLE ARC (Visualizing the 'tan beta')
-        # We place a small arc at the base of the berm
-        arc_x_base = 65 
-        arc_radius = 12
-        t = np.linspace(0, np.radians(slope_deg), 20)
-        fig_mini.add_trace(go.Scatter(
-            x=arc_x_base - (arc_radius * np.cos(t)),
-            y=arc_radius * np.sin(t),
-            mode='lines',
-            line=dict(color='orange', width=1.5),
-            name="Slope Arc"
-        ))
-
-        # 5. ANNOTATIONS (Tide Height & Strike Emoji)
-        fig_mini.add_annotation(x=dim_x+10, y=row['tide_level']/2, text=f"{row['tide_level']:.1f}m", showarrow=False, font=dict(size=9, family="Courier New"))
+        # 4. ANNOTATIONS
+        # Tide Height Label
+        fig_mini.add_annotation(x=dim_x+12, y=row['tide_level']/2, text=f"{row['tide_level']:.1f}m", 
+                                showarrow=False, font=dict(size=10, family="monospace", color="#2c3e50"))
         
+        # Ledge Strike
         if row['xi'] > 1.3:
-            fig_mini.add_annotation(x=ledge_x, y=row['tide_level']+0.3, text="💥", showarrow=False, font=dict(size=18))
+            fig_mini.add_annotation(x=ledge_x, y=row['tide_level']+0.4, text="💥", showarrow=False, font=dict(size=20))
         
         fig_mini.update_layout(
-            height=240, margin=dict(l=0, r=0, t=45, b=0),
-            title={'text': f"<b>{date}</b><br><span style='font-size:9px; color:gray;'>SLOPE: {slope_deg:.1f}° | R: {row['R']:.0f}%</span>", 'x': 0.5},
+            height=260, margin=dict(l=0, r=0, t=50, b=0),
+            title={'text': f"<b>{date}</b><br><span style='font-size:10px; color:gray;'>R: {row['R']:.0f}% | {slope_deg:.1f}°</span>", 'x': 0.5},
             xaxis=dict(visible=False), 
             yaxis=dict(range=[0, 5.5], visible=False),
             showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
@@ -295,11 +296,11 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
         
-        # Building/Eroding Status
+        # BUILDING/ERODING FLAG
         v_state = "BUILDING" if (row['swell_wave_height']/row['wavelength']) < 0.02 else "ERODING"
-        v_color = "#2ecc71" if v_state == "BUILDING" else "#95a5a6"
-        st.markdown(f"<div style='text-align:center; font-size:9px; color:{v_color}; font-family:monospace; letter-spacing:1px;'>{v_state} PHASE</div>", unsafe_allow_html=True)
-
+        v_color = "#27ae60" if v_state == "BUILDING" else "#7f8c8d"
+        st.markdown(f"<div style='text-align:center; font-size:10px; color:{v_color}; font-family:monospace;'>BANK {v_state}</div>", unsafe_allow_html=True)
+        
 # --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
 cols = [st.columns(5), st.columns(5)]
