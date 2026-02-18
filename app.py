@@ -151,122 +151,93 @@ with g_col2:
     """)
 st.divider()
 
-import numpy as np
-import plotly.graph_objects as go
-import streamlit as st
+import streamlit.components.v1 as components
 
-# --- 1. SETUP ---
-# Slowed down: 120 frames at 50ms = 6 second cycle
-n_frames = 120 
-x_base = np.linspace(0, 60, 200)
+# --- PARAMETRIC P5.JS WAVE ENGINE ---
+p5_code = f"""
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+<script>
+let t = 0;
+function setup() {{
+  createCanvas(windowWidth, 400);
+}}
 
-# The Bank (Static)
-y_sand = 4 / (1 + np.exp(-0.25 * (x_base - 42)))
-y_sand = (y_sand - y_sand.min()) * (slope * 12)
+function draw() {{
+  background(255);
+  let tide = 250; 
+  let h_s = {now_data['swell_wave_height'] * 40}; // Scaled height
+  let xi = {now_data['xi']}; // Iribarren influence
+  
+  // 1. DRAW SANDBANK
+  fill(194, 178, 128); noStroke();
+  beginShape();
+  vertex(0, height);
+  for (let x = 0; x <= width; x += 5) {{
+    let y = height - (150 / (1 + exp(-0.2 * (x/10 - 40))));
+    vertex(x, y);
+  }}
+  vertex(width, height);
+  endShape(CLOSE);
 
-h_s = now_data['swell_wave_height']
-xi = now_data['xi'] 
-tide = now_data['tide_level']
-
-frames = []
-
-for i in range(n_frames):
-    t = i / n_frames
+  // 2. WAVE LOGIC (Stages A-H)
+  t += 0.01; // Slower, smoother speed
+  let cycle = t % 3; // 3-second cycle
+  
+  fill(0, 105, 148, 180); stroke(0, 105, 148);
+  beginShape();
+  vertex(0, height);
+  
+  // Stages B-D: The Shoaling Lump
+  if (cycle < 1.2) {{
+    let progress = cycle / 1.2;
+    let crestX = progress * width * 0.7;
+    let amp = h_s * (1 + progress);
+    for (let x = 0; x <= width; x += 5) {{
+      let wave = amp * exp(-pow(x - crestX, 2) / (2 * pow(50, 2)));
+      vertex(x, tide - wave);
+    }}
+  }} 
+  // Stages E-G: The Pitching Barrel
+  else if (cycle < 2.2) {{
+    let progress = (cycle - 1.2) / 1.0;
+    let crestX = width * 0.7 + (progress * 50);
+    let throwDist = progress * (xi * 60);
+    let drop = pow(progress, 2) * 150;
     
-    # We build a single closed loop for the water
-    path_x = []
-    path_y = []
+    // Back of wave
+    for (let x = 0; x < crestX; x += 10) {{
+       let wave = h_s * 1.5 * exp(-pow(x - crestX, 2) / (2 * pow(60, 2)));
+       vertex(x, tide - wave);
+    }}
+    // THE PITCHING LIP (The "C" Shape)
+    for (let angle = 0; angle < PI * 1.2; angle += 0.2) {{
+       let r = h_s * 0.8;
+       let lx = crestX + throwDist + r * sin(angle);
+       let ly = (tide - h_s*1.5) + drop + r * cos(angle);
+       vertex(lx, ly);
+    }}
+    vertex(width, tide);
+  }}
+  // Stage H: Swash & Reflection
+  else {{
+    let progress = (cycle - 2.2) / 0.8;
+    let reach = h_s * 10 * sin(progress * PI);
+    for (let x = 0; x <= width; x += 10) {{
+      let y = tide;
+      if (x > width * 0.7 && x < width * 0.7 + reach) y -= 10 * (1-progress);
+      vertex(x, y);
+    }}
+  }}
 
-    # --- STAGES B-D: THE ROUND LUMP (0.0 - 0.4) ---
-    if t < 0.4:
-        p = t / 0.4
-        crest_x = p * 40
-        amp = h_s * (1 + p * 0.5)
-        # Rounder lump using Gaussian curve
-        width = 8 - (p * 4) 
-        
-        # Build surface
-        surface_x = list(x_base)
-        surface_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * width**2))) 
-                     for j, x in enumerate(x_base)]
-        path_x, path_y = surface_x, surface_y
+  vertex(width, height);
+  endShape(CLOSE);
+}}
+</script>
+<style> body {{ margin: 0; overflow: hidden; }} </style>
+"""
 
-    # --- STAGES E-G: THE PITCHING BARREL (0.4 - 0.75) ---
-    elif t < 0.75:
-        p = (t - 0.4) / 0.35
-        crest_x = 40 + (p * 5)
-        amp = h_s * 1.6
-        
-        # 1. Back of wave
-        back_x = np.linspace(0, crest_x, 80)
-        back_y = [max(np.interp(x, x_base, y_sand), tide + amp * np.exp(-((x - crest_x)**2) / (2 * 6**2))) 
-                  for x in back_x]
-        
-        # 2. The Overhanging Lip (The 'C' Curve)
-        # Higher Iribarren (xi) = More 'Throw' forward
-        throw = p * (xi * 6)
-        drop = 8 * (p**1.8)
-        phi = np.linspace(0, np.pi * 1.1, 40) # This creates the loop
-        r = (h_s * 0.7) # Radius of the barrel
-        
-        lip_x = crest_x + (throw) + r * np.sin(phi)
-        lip_y = (tide + amp) - drop + r * np.cos(phi)
-        
-        # 3. Connection to shore
-        shore_x = np.linspace(max(lip_x), 60, 80)
-        shore_y = [np.interp(x, x_base, y_sand) for x in shore_x]
-        
-        path_x = list(back_x) + list(lip_x) + list(shore_x)
-        path_y = list(back_y) + list(lip_y) + list(shore_y)
-
-    # --- STAGE H: REFLECTION & SWASH (0.75 - 1.0) ---
-    else:
-        p = (t - 0.75) / 0.25
-        impact_x = 42
-        # Surge and Reflect
-        reach = (h_s * 15) * np.sin(p * np.pi)
-        
-        path_x = list(x_base)
-        path_y = []
-        for j, x in enumerate(x_base):
-            if x < impact_x:
-                path_y.append(max(y_sand[j], tide + (h_s * 0.1 * (1-p))))
-            elif impact_x <= x <= impact_x + reach:
-                path_y.append(y_sand[j] + (0.3 * (1-p))) # Thin swash sheet
-            else:
-                path_y.append(y_sand[j])
-
-    # --- CLOSE THE POLYGON (Avoid water under sand) ---
-    # We go from the end of the surface, down to 0, back to start, and up
-    full_x = path_x + [60, 0]
-    full_y = path_y + [0, 0]
-
-    frames.append(go.Frame(
-        data=[
-            # Sand Layer (Drawn first)
-            go.Scatter(x=list(x_base) + [60, 0], y=list(y_sand) + [0, 0], fill='toself', 
-                       fillcolor='#C2B280', line=dict(color='#A68D60', width=1), hoverinfo='skip'),
-            # Water Layer (Drawn on top)
-            go.Scatter(x=full_x, y=full_y, fill='toself', 
-                       fillcolor='rgba(0, 105, 148, 0.7)', line=dict(color='#006994', width=2), hoverinfo='skip')
-        ],
-        name=f'f{i}'
-    ))
-
-# --- RENDER ---
-fig_ledge = go.Figure(
-    data=frames[0].data,
-    layout=go.Layout(
-        xaxis=dict(range=[0, 60], fixedrange=True, showgrid=False, zeroline=False),
-        yaxis=dict(range=[0, 9], fixedrange=True, showgrid=False, zeroline=False),
-        updatemenus=[{"type": "buttons", "buttons": [{"label": "🌊 Play Ledge Cycle", "method": "animate", 
-                     "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]}]}],
-        plot_bgcolor='white', height=450, margin=dict(l=0, r=0, t=0, b=0)
-    ),
-    frames=frames
-)
-
-st.plotly_chart(fig_ledge, use_container_width=True)
+# Embed the high-speed engine
+components.html(p5_code, height=400)
 
 # --- SCROLLABLE CHART ---
 st.divider()
