@@ -144,69 +144,62 @@ with g_col2:
     """)
 st.divider()
 
-# --- TOPOGRAPHICAL SECTION WITH BREAKING WAVE PROFILE ---
-st.subheader("📐 Beach Profile & Breaking Wave Geometry")
+# --- PROGRAMMED WAVE ANIMATION ---
+st.subheader("🔄 Live Slope Interaction Sim")
 
-# 1. Geometry Setup
-x_beach = np.linspace(0, 60, 100) 
-y_beach = x_beach * slope          
+# 1. Setup Base Geometry
+x_beach = np.linspace(0, 60, 100)
+y_beach = x_beach * slope
 current_tide = now_data['tide_level']
-
-# 2. Wave Physics for the "Lip"
-h_s = now_data['swell_wave_height']
 impact_x = current_tide / slope
-# The 'lip' height is based on swell height; its 'throw' is based on the Iribarren number (xi)
-lip_height = h_s * 0.8
-lip_throw = now_data['xi'] * 2 # Higher xi = further throw (hollower)
 
-fig_topo = go.Figure()
+# 2. Animation Parameters
+n_frames = 20
+frames = []
+# Calculate how far the wave 'washes' up the slope based on energy
+wash_dist = (now_data['swell_wave_height'] * 2) / (slope * 10) 
 
-# Plot the Sand (The Slope)
-fig_topo.add_trace(go.Scatter(
-    x=x_beach, y=y_beach, 
-    fill='toself', mode='lines', 
-    line=dict(color='burlywood', width=4),
-    name='Beach Gradient'
-))
+for i in range(n_frames):
+    # This math creates a "moving" wave pulse
+    # Phase moves from 0 to 1
+    phase = i / n_frames
+    
+    # Wave shape: A simple bell curve that moves toward the beach
+    wave_x_pos = 10 + (phase * (impact_x - 10))
+    wave_height = now_data['swell_wave_height'] * np.exp(-((x_beach - wave_x_pos)**2) / 10)
+    
+    # Run-up logic: After the wave hits the beach, the water 'washes' up
+    runup_y = np.zeros_like(x_beach)
+    if phase > 0.8: # The 'Impact' moment
+        extra_reach = (phase - 0.8) * wash_dist
+        runup_mask = (x_beach >= impact_x) & (x_beach <= impact_x + extra_reach)
+        runup_y[runup_mask] = current_tide + 0.1 # Thin film of water
+    
+    frames.append(go.Frame(
+        data=[
+            go.Scatter(x=x_beach, y=y_beach, fill='toself', line=dict(color='burlywood')), # Sand
+            go.Scatter(x=x_beach, y=np.maximum(current_tide, current_tide + wave_height + runup_y), 
+                       fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)')) # Water
+        ],
+        name=f'frame{i}'
+    ))
 
-# Plot the Ocean (The Body)
-fig_topo.add_trace(go.Scatter(
-    x=[0, impact_x, impact_x, 0], 
-    y=[current_tide, current_tide, 0, 0], 
-    fill='toself', mode='lines', 
-    line=dict(color='rgba(41, 128, 185, 0.7)', width=0),
-    name='Tide Level'
-))
-
-# 3. DRAW THE BREAKING WAVE (The "Animation" Frame)
-# This creates a curve that looks like a plunging wave lip
-wave_x = [impact_x - lip_throw, impact_x - (lip_throw*0.5), impact_x, impact_x]
-wave_y = [current_tide, current_tide + lip_height, current_tide + (lip_height*0.5), current_tide]
-
-fig_topo.add_trace(go.Scatter(
-    x=wave_x, y=wave_y, 
-    fill='toself', mode='lines', 
-    line=dict(color='rgba(255, 255, 255, 0.9)', width=2),
-    name='Breaking Lip'
-))
-
-# Annotate the "Pocket"
-if now_data['xi'] > 1.2:
-    fig_topo.add_annotation(
-        x=impact_x - (lip_throw*0.5), y=current_tide + (lip_height*0.2),
-        text="🌀 THE POCKET", font=dict(color="white", size=10),
-        showarrow=False, bgcolor="rgba(0,0,0,0.3)"
-    )
-
-fig_topo.update_layout(
-    height=400,
-    xaxis=dict(title="Distance from Low Tide (m)", range=[0, 60]),
-    yaxis=dict(title="Elevation (m)", range=[0, 6]),
-    plot_bgcolor='white',
-    showlegend=False
+# 3. Build the Figure
+fig_anim = go.Figure(
+    data=[
+        go.Scatter(x=x_beach, y=y_beach, fill='toself', line=dict(color='burlywood'), name="Sand"),
+        go.Scatter(x=x_beach, y=y_beach*0 + current_tide, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)'), name="Water")
+    ],
+    layout=go.Layout(
+        xaxis=dict(range=[0, 60], autorange=False),
+        yaxis=dict(range=[0, 6], autorange=False),
+        updatemenus=[dict(type="buttons", buttons=[dict(label="▶ Play Sim", method="animate", args=[None, {"frame": {"duration": 50, "redraw": True}, "fromcurrent": True}])])]
+    ),
+    frames=frames
 )
 
-st.plotly_chart(fig_topo, use_container_width=True)
+st.plotly_chart(fig_anim, use_container_width=True)
+st.caption("Press Play to see how the current swell energy interacts with your calibrated slope.")
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
