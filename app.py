@@ -82,21 +82,44 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg):
     if score > 6: return "bg-orange", "MUSH"
     return "bg-red", "WASHED OUT"
 
+# --- TIDE LOGIC (Simplified for Pakiri) ---
+def get_high_tide(date_obj):
+    # Reference: High Tide Feb 18 is ~08:15 AM. Tides shift ~50 mins later each day.
+    ref_date = datetime(2026, 2, 18, 8, 15)
+    days_diff = (date_obj - ref_date).days
+    total_minutes_shift = days_diff * 50
+    tide_time = ref_date + pd.Timedelta(minutes=total_minutes_shift)
+    # Adjust to Sunday 22nd / Friday 27th windows
+    return tide_time.strftime('%I:%M %p')
+
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
+df['date_obj'] = df['time'].dt.date
+
 daily = df.groupby('date_label').agg({
     'xi': 'max', 'swell_wave_height': 'mean', 
     'swell_wave_period': 'max', 'swell_wave_direction': 'mean',
-    'wind_dir': 'mean'
+    'wind_dir': 'mean', 'time': 'first'
 }).reindex(df['date_label'].unique())
 
 rows = [st.columns(5), st.columns(5)]
 for i, (date, row) in enumerate(daily.iterrows()):
     color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'])
+    tide_time = get_high_tide(row['time'])
+    
     with rows[i//5][i%5]:
-        st.markdown(f"<div class='card {color}'>{date}<br><span style='font-size:1.4em;'>{label}</span><br>ξ {row['xi']:.2f}</div>", unsafe_allow_html=True)
-
+        st.markdown(f"""
+            <div class='card {color}'>
+                {date}<br>
+                <span style='font-size:1.4em;'>{label}</span><br>
+                <small>Tide Peak: {tide_time}</small><br>
+                <hr style='margin:10px 0;'>
+                ξ {row['xi']:.2f}
+            </div>
+            """, unsafe_allow_html=True)
+        st.caption(f"Max: {row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s")
+        
 # --- CHART ---
 st.divider()
 fig = px.area(df, x='time', y='xi', title="Hourly Ledge Quality Trend")
