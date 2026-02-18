@@ -168,86 +168,91 @@ xi = now_data['xi']
 n_frames = 100
 frames = []
 
+# --- RE-ENGINEERED ANIMATION LOOP ---
 for i in range(n_frames):
     t = i / n_frames
     display_y = np.full_like(x_range, current_tide)
     foam_x, foam_y, spray_x, spray_y = [], [], [], []
 
-    # --- STAGES B-D: THE SHOAL ---
+    # 1. THE SHOAL (Stages B-D)
     if t < 0.3:
         progress = t / 0.3
         crest_x = progress * 30
-        # Steep front face, gentle back (Trochoid approximation)
         for j, x in enumerate(x_range):
             dist = x - crest_x
-            if dist < 0:
-                display_y[j] = current_tide + h_s * np.exp(0.1 * dist)
-            else:
-                display_y[j] = current_tide + h_s * np.exp(-0.4 * dist)
+            # Asymmetric face: steep front, trailing back
+            display_y[j] = current_tide + h_s * (np.exp(0.12 * dist) if dist < 0 else np.exp(-0.45 * dist))
 
-    # --- STAGES E-G: THE PLUNGING LIP (THE "THROW") ---
+    # 2. THE PLUNGE (Stages E-G: The "Throw")
     elif t < 0.65:
         progress = (t - 0.3) / 0.35
         crest_x = 30 + (progress * 10)
         
-        # Base Wave Body
+        # Base water level
         for j, x in enumerate(x_range):
             dist = x - crest_x
-            display_y[j] = current_tide + h_s * np.exp(-0.5 * abs(dist)) if dist > 0 else current_tide + h_s * np.exp(0.1 * dist)
+            display_y[j] = current_tide + h_s * (np.exp(0.1 * dist) if dist < 0 else np.exp(-0.6 * dist))
 
-        # The Projectile Lip (Geometry from your diagram)
-        # It curves out and then down
-        lip_x_base = crest_x
-        # Throw distance based on Iribarren (xi)
-        throw = progress * (xi * 4) 
-        drop = 5 * (progress**2) # Gravity acceleration
+        # Projectile Lip Geometry
+        # The lip is projected forward based on Iribarren number (xi)
+        throw_power = progress * (xi * 4.5)
+        gravity_drop = 6 * (progress**2)
         
-        phi = np.linspace(0, np.pi * 0.9, 30)
-        spray_x = lip_x_base + (throw * np.sin(phi/1.5))
-        spray_y = (current_tide + h_s) - drop + (h_s * 0.2 * np.cos(phi))
+        # Parametric arc for the "C" shape barrel
+        phi = np.linspace(0, np.pi * 0.95, 40)
+        spray_x = crest_x + (throw_power * np.sin(phi/1.4))
+        spray_y = (current_tide + h_s) - gravity_drop + (h_s * 0.25 * np.cos(phi))
         
-        # Offshore spray (Wind effect)
-        if now_data['wind_speed'] > 15 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S']:
-            spray_x = np.append(spray_x, [crest_x - 2, crest_x - 5])
-            spray_y = np.append(spray_y, [current_tide + h_s + 0.5, current_tide + h_s + 1.2])
+        # Offshore spray lines (Wind-blown)
+        if now_data['wind_speed'] > 14 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S']:
+            spray_x = np.append(spray_x, [crest_x - 1, crest_x - 4])
+            spray_y = np.append(spray_y, [current_tide + h_s + 0.4, current_tide + h_s + 1.0])
 
-    # --- STAGE H: IMPACT & THINNING SWASH ---
+    # 3. IMPACT & LINGERING WHITEWASH (Stage H)
     elif t < 0.85:
         progress = (t - 0.65) / 0.2
         impact_x = 40
-        swash_reach = (h_s * 15) * np.sin(progress * (np.pi/2))
+        # Swash moves fast initially, then slows
+        swash_reach = (h_s * 16) * np.sin(progress * (np.pi/2))
         
-        # The "Sheet" of water following the sand slope
         mask = (x_range >= impact_x) & (x_range <= impact_x + swash_reach)
-        # Water thins out as it reaches max height
-        thickness = 0.25 * (1 - (progress * 0.8))
+        # Water thins out as it flows up the bank
+        thickness = 0.3 * (1 - (progress * 0.75))
         display_y[mask] = y_sand[mask] + thickness
         
-        # Whitewash / Foam Clusters
-        foam_x = np.random.uniform(impact_x, impact_x + swash_reach, 25)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.2 for val in foam_x]
+        # Whitewash particle cluster
+        foam_x = np.random.uniform(impact_x - 2, impact_x + swash_reach, 30)
+        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.25 for val in foam_x]
 
-    # --- THE RECEDE (BACKWASH) ---
+    # 4. THE SUCK-BACK (Backwash)
     else:
         progress = (t - 0.85) / 0.15
-        reach = (h_s * 15) * (1 - progress)
+        reach = (h_s * 16) * (1 - progress)
         mask = (x_range >= 38) & (x_range <= 40 + reach)
-        display_y[mask] = y_sand[mask] + 0.05
+        display_y[mask] = y_sand[mask] + 0.08
         
-        foam_x = np.random.uniform(38, 40 + reach, 10)
+        # Lingering bubbles on the sand
+        foam_x = np.random.uniform(38, 40 + reach, 12)
         foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.05 for val in foam_x]
 
-    # Final "Watertight" Geometry
+    # Final "Watertight" Geometry for Polygon
     y_capped = np.maximum(y_sand, display_y)
     y_poly = np.concatenate([[0], y_capped, [0, 0]])
 
     frames.append(go.Frame(
         data=[
-            go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
-            go.Scatter(x=x_poly, y=y_poly, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Ocean"),
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=np.random.randint(2, 6), opacity=0.6), showlegend=False),
+            # The Sandbank
+            go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', 
+                       line=dict(color='#C2B280', width=2.5), name="Bank", hoverinfo='skip'),
+            # The Water Body
+            go.Scatter(x=x_poly, y=y_poly, fill='toself', 
+                       line=dict(color='rgba(41, 128, 185, 0.9)', width=0), name="Ocean", hoverinfo='skip'),
+            # The Whitewash (Particles)
+            go.Scatter(x=foam_x, y=foam_y, mode='markers', 
+                       marker=dict(color='white', size=np.random.randint(3, 7), opacity=0.7), showlegend=False),
+            # The Plunging Lip & Spray
             go.Scatter(x=spray_x, y=spray_y, mode='lines+markers' if t < 0.65 else 'markers', 
-                       marker=dict(color='white', size=2), line=dict(color='white', width=3), showlegend=False)
+                       marker=dict(color='white', size=2), line=dict(color='white', width=4), showlegend=False)
         ],
         name=f'f{i}'
     ))
