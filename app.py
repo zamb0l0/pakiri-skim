@@ -122,26 +122,26 @@ canvas_html = f"""
 let hs={float(now_data['swell_wave_height'])}; let xi={float(now_data['xi'])}; let tide={float(now_data['tide_level'])}; let slope={float(slope)};
 function setup(){{var c=createCanvas(windowWidth*0.9, 340); c.parent('p5-container');}}
 function draw(){{
-  background(255); let time=frameCount*0.02;
-  fill(194,178,128); noStroke(); beginShape(); vertex(0,height);
-  for(let x=0; x<=width; x+=10){{let sandY=height-(20+(1/(1+exp(-0.02*(x-width*0.7))))*(slope*2500)); vertex(x,sandY);}}
-  vertex(width,height); endShape(CLOSE);
-  fill(0,105,148,180); stroke(255); beginShape(); vertex(0,height);
-  for(let x=0; x<=width; x+=5){{
-    let prog=x/width; let cycle=(time-prog*4)%TWO_PI; let amp=(hs*40)*(1+(max(0,x-width*0.4)*0.003));
-    let xOff=(sin(cycle)>0.4 && xi>1.1)?pow(sin(cycle),3)*(xi*20):0;
-    let y=(height-120)-(tide*20)+sin(cycle)*amp;
-    let sandL=height-(20+(1/(1+exp(-0.02*(x-width*0.7))))*(slope*2500));
-    vertex(x+xOff, min(y, sandL));
-  }} vertex(width,height); endShape(CLOSE);
+    background(255); let time=frameCount*0.02;
+    fill(194,178,128); noStroke(); beginShape(); vertex(0,height);
+    for(let x=0; x<=width; x+=10){{let sandY=height-(20+(1/(1+exp(-0.02*(x-width*0.7))))*(slope*2500)); vertex(x,sandY);}}
+    vertex(width,height); endShape(CLOSE);
+    fill(0,105,148,180); stroke(255); beginShape(); vertex(0,height);
+    for(let x=0; x<=width; x+=5){{
+        let prog=x/width; let cycle=(time-prog*4)%TWO_PI; let amp=(hs*40)*(1+(max(0,x-width*0.4)*0.003));
+        let xOff=(sin(cycle)>0.4 && xi>1.1)?pow(sin(cycle),3)*(xi*20):0;
+        let y=(height-120)-(tide*20)+sin(cycle)*amp;
+        let sandL=height-(20+(1/(1+exp(-0.02*(x-width*0.7))))*(slope*2500));
+        vertex(x+xOff, min(y, sandL));
+    }} vertex(width,height); endShape(CLOSE);
 }}
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- ENHANCED: GRADIENT BELL CURVE COMPARISON ---
+# --- DAILY GEOMETRY (FIXED WITH go.Bar) ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("The curve color indicates **local steepness**. High-intensity colors (Red/Purple) mark the 'Ledge' zones.")
+st.write("Curve color indicates local **Steepness** (Hotter = Ledge). Faint line = 10-day average.")
 
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily_geom = df.groupby('date_label').agg({
@@ -150,18 +150,15 @@ daily_geom = df.groupby('date_label').agg({
 
 avg_slope = daily_geom['dynamic_slope'].mean()
 g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(20, 100, 150) # Focused range for the berm
+x_vals = np.linspace(20, 100, 80) # Using 80 points to create smooth bar profile
 
 def get_berm_data(slope_val):
-    # Gaussian parameters
     peak_h = 3.2
     mu = 70 
-    # Sigma (width) is inversely proportional to slope
     sigma = 25 / (slope_val * 15) 
     y = peak_h * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
-    # Steepness is the absolute first derivative
-    steepness = np.abs(np.gradient(y))
-    return y, steepness
+    dy = np.abs(np.gradient(y))
+    return y, dy
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     with g_cols[i//5][i%5]:
@@ -177,42 +174,36 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
             hoverinfo='none'
         ))
 
-        # 2. Gradient-colored Curve
-        # We use a Scatter trace with a colorbar based on the 'dy' (steepness)
-        fig_mini.add_trace(go.Scatter(
+        # 2. Daily Profile (Using BARS to allow per-point coloring)
+        fig_mini.add_trace(go.Bar(
             x=x_vals, y=y_vals,
-            mode='lines',
-            line=dict(
-                width=6,
-                color=dy, # Map color to steepness
-                colorscale='Inferno', # Yellow -> Orange -> Red -> Black/Purple
-                shape='spline'
+            marker=dict(
+                color=dy, 
+                colorscale='Inferno', 
+                showscale=False
             ),
+            width=1.2,
             name='Steepness'
         ))
 
         # 3. Tide Line
         fig_mini.add_trace(go.Scatter(
             x=[20, 100], y=[row['tide_level'], row['tide_level']], 
-            line=dict(color='cyan', width=2, dash='solid'), 
+            line=dict(color='cyan', width=2), 
             name='Tide'
         ))
         
-        # Calculate where the ledge is (Max steepness)
-        max_steep_idx = np.argmax(dy)
-        ledge_x = x_vals[max_steep_idx]
-        
         fig_mini.update_layout(
-            height=200, margin=dict(l=5, r=5, t=40, b=10),
+            height=200, margin=dict(l=0, r=0, t=40, b=0),
             title={'text': f"<b>{date}</b><br>ξ {row['xi']:.2f}", 'font': {'size': 13}, 'x': 0.5},
             xaxis=dict(visible=False), 
             yaxis=dict(range=[0, 4], visible=False),
-            showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+            showlegend=False, barmode='overlay', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
         )
 
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
 
-# --- 10-DAY GRID ---
+# --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
 cols = [st.columns(5), st.columns(5)]
 for i, (date, row) in enumerate(daily_geom.iterrows()):
@@ -238,8 +229,8 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 # --- TREND CHART ---
 st.divider()
 st.subheader("📈 Quality vs Tide Trend")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1), yaxis="y2"))
-fig.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=4)))
-fig.update_layout(height=400, width=1500, yaxis=dict(title="Quality", range=[0, 2.5]), yaxis2=dict(overlaying="y", side="right", range=[0, 5]))
-st.plotly_chart(fig, use_container_width=True)
+fig_trend = go.Figure()
+fig_trend.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1), yaxis="y2"))
+fig_trend.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=4)))
+fig_trend.update_layout(height=400, width=1500, yaxis=dict(title="Quality", range=[0, 2.5]), yaxis2=dict(overlaying="y", side="right", range=[0, 5]))
+st.plotly_chart(fig_trend, use_container_width=True)
