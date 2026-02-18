@@ -173,61 +173,63 @@ for i in range(n_frames):
     display_y = np.full_like(x_range, current_tide)
     foam_x, foam_y, spray_x, spray_y = [], [], [], []
 
-    # --- STAGE 1: THE BARREL (Stages B-G) ---
-    if t < 0.6: 
+    # 1. WAVE SHOALING & PITCHING (t: 0.0 -> 0.6)
+    if t < 0.6:
         progress = t / 0.6
+        # Crest moves from deep water toward the berm (x=40)
         crest_x = progress * 40
-        # A plunging wave lip follows a more aggressive parametric arc
-        phi = np.linspace(0, np.pi * 1.15, 80)
-        shoal_h = h_s * (1 + (crest_x / 45))
+        dynamic_h = h_s * (1 + (progress * 0.5)) # Wave grows as it shoals
         
-        # Throw the lip forward based on Iribarren (xi)
-        # We use a power of progress to make the 'pitch' happen late
-        lip_throw = (progress**3) * xi * 4.0 
-        
-        arc_x = crest_x + np.sin(phi) * shoal_h + (phi * lip_throw * 0.4)
-        arc_y = current_tide + (1 - np.cos(phi)) * shoal_h
-        
-        # Smoothly interpolate the wave face onto our x_range
-        wave_influence = np.interp(x_range, arc_x, arc_y, left=current_tide, right=current_tide)
-        display_y = np.maximum(display_y, wave_influence)
+        # We build the wave using a Trochoidal-style curve for that "peaked" look
+        for j, x in enumerate(x_range):
+            dist = x - crest_x
+            # The 'steepness' of the face increases as it nears the berm
+            face_steepness = 0.2 + (progress * 0.3)
+            if dist < 0: # Back of the wave
+                display_y[j] = current_tide + dynamic_h * np.exp(-0.05 * abs(dist))
+            else: # Face of the wave
+                display_y[j] = current_tide + dynamic_h * np.exp(-face_steepness * abs(dist))
 
-        # Offshore Spray (if wind is W/SW/S)
-        if now_data['wind_speed'] > 12 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S', 'WSW']:
-            spray_x = [crest_x - 1, crest_x - 6]
-            spray_y = [current_tide + shoal_h * 1.8, current_tide + shoal_h * 2.3]
+        # THE LIP: Only starts curling after 40% of the cycle
+        if progress > 0.4:
+            lip_progress = (progress - 0.4) / 0.6
+            # The lip "throws" forward based on xi
+            throw_dist = lip_progress * (xi * 5)
+            # Parabolic arc for the falling lip
+            drop = 4 * (lip_progress**2)
+            
+            # Create the 'C' shape of the barrel
+            phi = np.linspace(0, np.pi, 20)
+            spray_x = crest_x + throw_dist + (np.sin(phi) * dynamic_h * 0.5)
+            spray_y = (current_tide + dynamic_h) - drop + (np.cos(phi) * dynamic_h * 0.5)
 
-    # --- STAGE 2: THE IMPACT & WHITEWASH (Stage H) ---
+    # 2. THE IMPACT & WHITEWASH (t: 0.6 -> 0.8)
     elif t < 0.8:
         progress = (t - 0.6) / 0.2
         impact_x = 40
-        reach = (h_s * 18 * progress) # How far the swash runs up the beach
+        swash_reach = (h_s * 12) * np.sqrt(progress) # Fast start, slow end
         
-        # The swash 'sheet' follows the sand profile exactly
-        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
-        display_y[mask] = y_sand[mask] + 0.2
+        # Water follows the sand exactly here
+        mask = (x_range >= impact_x) & (x_range <= impact_x + swash_reach)
+        display_y[mask] = y_sand[mask] + (0.3 * (1 - progress)) # Thins as it climbs
         
-        # WHITEWASH: Generate random particles at the leading edge
-        foam_x = np.random.uniform(impact_x + reach - 2, impact_x + reach, 15)
-        # Map foam to the sand height at those points
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.3 for val in foam_x]
+        # Whitewash (Turbulence) - Random clusters of particles
+        foam_x = np.random.normal(impact_x + swash_reach, 1.5, 20)
+        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.4 for val in foam_x]
 
-    # --- STAGE 3: THE RECEDE (The 'Suck-Back') ---
+    # 3. THE RECEDE / BACKWASH (t: 0.8 -> 1.0)
     else:
         progress = (t - 0.8) / 0.2
-        impact_x = 40
-        reach = (h_s * 18) * (1 - progress) # Water retreats back to the break point
+        # Water pulls back into the next trough
+        reach = (h_s * 12) * (1 - progress)
+        mask = (x_range >= 35) & (x_range <= 40 + reach)
+        display_y[mask] = y_sand[mask] + 0.1
         
-        # Water thins out as it recedes to prevent the 'V' shape
-        water_thickness = 0.15 * (1 - progress)
-        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
-        display_y[mask] = y_sand[mask] + water_thickness
-        
-        # Residual foam bubbles lingering on the sand
-        foam_x = np.random.uniform(impact_x, impact_x + reach, 8)
+        # Bubbles popping on the sand
+        foam_x = np.random.uniform(38, 40 + reach, 10)
         foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.1 for val in foam_x]
 
-    # Closing the polygon for a solid ocean fill
+    # Final "Watertight" Geometry
     y_capped = np.maximum(y_sand, display_y)
     y_poly = np.concatenate([[0], y_capped, [0, 0]])
 
@@ -235,10 +237,8 @@ for i in range(n_frames):
         data=[
             go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
             go.Scatter(x=x_poly, y=y_poly, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Ocean"),
-            # Whitewash markers
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=np.random.randint(4, 10), opacity=0.8), showlegend=False),
-            # Offshore spray line
-            go.Scatter(x=spray_x, y=spray_y, mode='lines', line=dict(color='rgba(255,255,255,0.4)', width=3)) if spray_x else go.Scatter(x=[None], y=[None])
+            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=np.random.randint(3, 8), opacity=0.7)),
+            go.Scatter(x=spray_x, y=spray_y, mode='lines', line=dict(color='white', width=4)) if len(spray_x) > 0 else go.Scatter(x=[None], y=[None])
         ],
         name=f'f{i}'
     ))
