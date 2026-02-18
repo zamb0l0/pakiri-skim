@@ -74,9 +74,13 @@ def get_cardinal(degrees):
     dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
     return dirs[int((degrees + 11.25) / 22.5) % 16]
 
-def get_arrow(deg):
-    arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']
-    return arrows[int((deg + 22.5) / 45) % 8]
+def get_arrow_with_name(deg):
+    # Get Name
+    name = get_cardinal(deg)
+    # Get Arrow (Pointing TOWARDS the beach/direction of travel)
+    arrows = ['↓', '↙', '←', '↖', '↑', '↗', '→', '↘']
+    arrow = arrows[int((deg + 22.5) / 45) % 8]
+    return f"{name} {arrow}"
 
 def get_high_tide_dt(dt_obj):
     ref = datetime(2026, 2, 18, 8, 15)
@@ -92,6 +96,7 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed, tide_h):
     if 0.3 <= h <= 0.6: score += 7
     if t >= 11: score += 5
     
+    # Scoring Categories
     if t >= 13 and xi > 1.2: return "bg-blue", "🏆 DEC 8th BERM"
     if swell_dir < 45 and wind_card in ['S', 'SSW', 'SW']: return "bg-blue", "🌪️ RIVERMOUTH WRAP"
     if wind_speed > 25: return "bg-orange", "TOO WINDY"
@@ -123,8 +128,9 @@ for i, (date, row) in enumerate(daily.iterrows()):
             <div class='card {color}'>
                 <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
                 <div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
-                <div style='font-size: 1.0em;'>🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s {get_arrow(row['swell_wave_direction'])}</div>
-                <div style='font-size: 0.85em;'>💨 {row['wind_speed']:.0f}km/h {get_arrow(row['wind_dir'])}</div>
+                <div style='font-size: 1.0em;'>🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s</div>
+                <div style='font-size: 0.85em; opacity: 0.9;'>Swell: {get_arrow_with_name(row['swell_wave_direction'])}</div>
+                <div style='font-size: 0.85em; opacity: 0.9;'>Wind: {get_arrow_with_name(row['wind_dir'])}</div>
                 <div class='session-time'>🎯 Best: {session_start} - {session_end}</div>
                 <hr style='margin:8px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
                 <div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
