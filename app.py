@@ -138,104 +138,107 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- EXAGGERATED: BERM DYNAMICS & REFLECTION ---
+# --- EXAGGERATED: BERM DYNAMICS, REFLECTION & SAND VOLUME ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Visual scaling is **exaggerated**. **R%** = Reflection (Backwash Power). 💥 indicates the Ledge Strike Zone.")
+st.write("Visuals are **highly exaggerated** to show daily variance. 💥 = Ledge Strike Zone. **R%** = Backwash Power.")
 
-# 1. Ensure the dataframe is grouped correctly for the loop
+# 1. Grouping and Prep
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily_geom = df.groupby('date_label').agg({
     'xi':'max', 
     'tide_level':'max', 
-    'dynamic_slope':'max'
+    'dynamic_slope':'max',
+    'swell_wave_height':'mean',
+    'wavelength':'mean'
 }).reindex(df['date_label'].unique())
 
-# Calculate average for the ghost reference
 avg_slope = daily_geom['dynamic_slope'].mean()
 avg_xi = daily_geom['xi'].mean()
 
-# Setup Grid
 g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(10, 100, 80) # The horizontal beach distance
+x_vals = np.linspace(10, 100, 100)
 
-def get_exaggerated_profile(slope_val, xi_val):
-    # POSITION: The 'Ledge' moves based on slope intensity
-    mu = 85 - (slope_val * 80) 
+def get_extreme_profile(slope_val, xi_val, h, wav_len):
+    # POSITION: Move the 'Step' based on slope
+    mu = 90 - (slope_val * 90) 
     
-    # SHAPE: Exponentially shrink width (sigma) based on xi
-    # This makes 'Good' days look like sharp walls and 'Bad' days like flat ramps
-    sigma = 20 / (xi_val ** 2.5) 
+    # SHAPE: Massive scaling. Divisor power of 3.0 creates huge visual difference.
+    sigma = 25 / (xi_val ** 3.0) 
     
-    # 1. The Ledge Face (Gaussian)
-    y = 3.5 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    # 1. The Ledge Face
+    y = 3.6 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
     
-    # 2. The Berm Rise (Flattening off and rising slightly at the back-beach)
-    y = np.where(x_vals > mu, 3.5 + (0.008 * (x_vals - mu)), y)
+    # 2. The Rising Dune (Diagrammatic rise behind the ledge)
+    y = np.where(x_vals > mu, 3.6 + (0.012 * (x_vals - mu)), y)
     
-    # 3. Local Steepness for color gradient
-    dy = np.abs(np.gradient(y))
+    # 3. Reflection Coefficient (R%)
+    reflection = (xi_val**2) / (xi_val**2 + 4.5) * 100
     
-    # 4. Reflection Coefficient (R = xi^2 / (xi^2 + 5))
-    reflection = (xi_val**2) / (xi_val**2 + 5) * 100
+    # 4. Sand Volume (Dean's Parameter approach: H / (fall_velocity * period))
+    # If wave steepness (H/L) is low, sand builds. If high, it erodes.
+    steepness_ratio = h / wav_len
+    volume_state = "BUILDING" if steepness_ratio < 0.02 else "ERODING"
+    vol_color = "gold" if volume_state == "BUILDING" else "gray"
     
-    return y, dy, reflection, mu
+    return y, reflection, mu, volume_state, vol_color
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
-    # Safety check for NameError: Ensure row exists
     if pd.isna(row['xi']): continue
         
     with g_cols[i//5][i%5]:
-        y_vals, dy, reflection, ledge_x = get_exaggerated_profile(row['dynamic_slope'], row['xi'])
-        y_avg, _, _, _ = get_exaggerated_profile(avg_slope, avg_xi) 
+        y_vals, reflection, ledge_x, v_state, v_color = get_extreme_profile(
+            row['dynamic_slope'], row['xi'], row['swell_wave_height'], row['wavelength']
+        )
+        y_avg, _, _, _, _ = get_extreme_profile(avg_slope, avg_xi, 1.0, 100) 
         
+        # Calculate local gradient for the "Heat Map" coloring
+        dy = np.abs(np.gradient(y_vals))
+
         fig_mini = go.Figure()
 
-        # 1. Ghost Reference (Average Bank)
+        # Ghost Reference
         fig_mini.add_trace(go.Scatter(
             x=x_vals, y=y_avg, 
-            line=dict(color='rgba(150, 150, 150, 0.1)', width=1, dash='dot'),
+            line=dict(color='rgba(200, 200, 200, 0.08)', width=1, dash='dot'),
             hoverinfo='none'
         ))
 
-        # 2. Daily Profile - Gradient Bars (The Sand)
+        # The Profile (Sand)
         fig_mini.add_trace(go.Bar(
             x=x_vals, y=y_vals,
-            marker=dict(
-                color=dy, 
-                colorscale='YlOrRd', # Redder = Steeper
-                showscale=False
-            ),
-            width=1.4
+            marker=dict(color=dy, colorscale='Hot', showscale=False),
+            width=1.1
         ))
 
-        # 3. Tide Line (The Water Level)
+        # The Tide Line
         fig_mini.add_trace(go.Scatter(
             x=[10, 100], y=[row['tide_level'], row['tide_level']], 
-            line=dict(color='cyan', width=4), 
-            name='Tide'
+            line=dict(color='cyan', width=5)
         ))
 
-        # 4. Strike Zone Icon (Boom 💥 where tide hits the ledge)
-        # We place it near the 'mu' point (the ledge face)
-        fig_mini.add_annotation(
-            x=ledge_x, y=row['tide_level'],
-            text="💥" if row['xi'] > 1.2 else "",
-            showarrow=False, font=dict(size=20)
-        )
+        # Strike Annotation
+        if row['xi'] > 1.3:
+            fig_mini.add_annotation(
+                x=ledge_x, y=row['tide_level'], text="💥",
+                showarrow=False, font=dict(size=22)
+            )
         
         fig_mini.update_layout(
-            height=230, margin=dict(l=0, r=0, t=50, b=0),
+            height=250, margin=dict(l=0, r=0, t=60, b=0),
             title={
-                'text': f"<b>{date}</b><br><span style='color:cyan; font-size:11px;'>Reflect: {reflection:.0f}%</span>", 
+                'text': f"<b>{date}</b><br><span style='color:cyan;'>R: {reflection:.0f}%</span>", 
                 'font': {'size': 14}, 'x': 0.5
             },
             xaxis=dict(visible=False), 
-            yaxis=dict(range=[0, 5], visible=False),
+            yaxis=dict(range=[0, 5.5], visible=False),
             showlegend=False, barmode='overlay', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
         )
 
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
+        
+        # Sand Volume Indicator
+        st.markdown(f"<div style='text-align:center; font-size:10px; color:{v_color};'>BANK {v_state}</div>", unsafe_allow_html=True)
 
 # --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
