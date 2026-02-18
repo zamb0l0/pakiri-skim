@@ -141,73 +141,97 @@ components.html(canvas_html, height=360)
 # --- EXAGGERATED: BERM DYNAMICS & REFLECTION ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Visual scaling is **exaggerated** to show bank intensity. **R%** is the Reflection Coefficient (Backwash Power).")
+st.write("Visual scaling is **exaggerated**. **R%** = Reflection (Backwash Power). 💥 indicates the Ledge Strike Zone.")
+
+# 1. Ensure the dataframe is grouped correctly for the loop
+df['date_label'] = df['time'].dt.strftime('%a, %b %d')
+daily_geom = df.groupby('date_label').agg({
+    'xi':'max', 
+    'tide_level':'max', 
+    'dynamic_slope':'max'
+}).reindex(df['date_label'].unique())
+
+# Calculate average for the ghost reference
+avg_slope = daily_geom['dynamic_slope'].mean()
+avg_xi = daily_geom['xi'].mean()
+
+# Setup Grid
+g_cols = [st.columns(5), st.columns(5)]
+x_vals = np.linspace(10, 100, 80) # The horizontal beach distance
 
 def get_exaggerated_profile(slope_val, xi_val):
-    # POSITION: Move the ledge forward/back based on tide-adjusted slope
-    mu = 85 - (slope_val * 100) 
+    # POSITION: The 'Ledge' moves based on slope intensity
+    mu = 85 - (slope_val * 80) 
     
-    # SHAPE: High xi = Vertical Wall | Low xi = Flat Ramp
-    # We use xi to aggressively shrink the 'sigma' (width of the face)
-    sigma = 15 / (xi_val ** 2) 
+    # SHAPE: Exponentially shrink width (sigma) based on xi
+    # This makes 'Good' days look like sharp walls and 'Bad' days like flat ramps
+    sigma = 20 / (xi_val ** 2.5) 
     
-    # 1. The Ledge Face
+    # 1. The Ledge Face (Gaussian)
     y = 3.5 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
     
-    # 2. The Berm Plateau (Real beach rise/flattening)
-    # Beyond the peak, the sand stays high or rises slightly (0.01 slope)
-    y = np.where(x_vals > mu, 3.5 + (0.01 * (x_vals - mu)), y)
+    # 2. The Berm Rise (Flattening off and rising slightly at the back-beach)
+    y = np.where(x_vals > mu, 3.5 + (0.008 * (x_vals - mu)), y)
     
-    # 3. Steepness for coloring
+    # 3. Local Steepness for color gradient
     dy = np.abs(np.gradient(y))
     
-    # 4. Reflection Coefficient (Simplified: R = xi^2 / (xi^2 + 10))
+    # 4. Reflection Coefficient (R = xi^2 / (xi^2 + 5))
     reflection = (xi_val**2) / (xi_val**2 + 5) * 100
     
-    return y, dy, reflection
+    return y, dy, reflection, mu
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
+    # Safety check for NameError: Ensure row exists
+    if pd.isna(row['xi']): continue
+        
     with g_cols[i//5][i%5]:
-        # Generate data using the Max XI of the day for the visual
-        y_vals, dy, reflection = get_exaggerated_profile(row['dynamic_slope'], row['xi'])
-        y_avg, _, _ = get_exaggerated_profile(avg_slope, 1.0) # Baseline average
+        y_vals, dy, reflection, ledge_x = get_exaggerated_profile(row['dynamic_slope'], row['xi'])
+        y_avg, _, _, _ = get_exaggerated_profile(avg_slope, avg_xi) 
         
         fig_mini = go.Figure()
 
-        # Faint Average Reference
+        # 1. Ghost Reference (Average Bank)
         fig_mini.add_trace(go.Scatter(
             x=x_vals, y=y_avg, 
-            line=dict(color='rgba(200, 200, 200, 0.1)', width=1, dash='dot'),
+            line=dict(color='rgba(150, 150, 150, 0.1)', width=1, dash='dot'),
             hoverinfo='none'
         ))
 
-        # The Daily Profile - Gradient Bars
+        # 2. Daily Profile - Gradient Bars (The Sand)
         fig_mini.add_trace(go.Bar(
             x=x_vals, y=y_vals,
             marker=dict(
                 color=dy, 
-                colorscale='YlOrRd', # Yellow to Deep Red for the 'Hot' zones
-                showscale=False,
-                line=dict(width=0)
+                colorscale='YlOrRd', # Redder = Steeper
+                showscale=False
             ),
-            width=1.5
+            width=1.4
         ))
 
-        # The Tide Line
+        # 3. Tide Line (The Water Level)
         fig_mini.add_trace(go.Scatter(
             x=[10, 100], y=[row['tide_level'], row['tide_level']], 
             line=dict(color='cyan', width=4), 
             name='Tide'
         ))
+
+        # 4. Strike Zone Icon (Boom 💥 where tide hits the ledge)
+        # We place it near the 'mu' point (the ledge face)
+        fig_mini.add_annotation(
+            x=ledge_x, y=row['tide_level'],
+            text="💥" if row['xi'] > 1.2 else "",
+            showarrow=False, font=dict(size=20)
+        )
         
         fig_mini.update_layout(
-            height=220, margin=dict(l=0, r=0, t=50, b=0),
+            height=230, margin=dict(l=0, r=0, t=50, b=0),
             title={
-                'text': f"<b>{date}</b><br><span style='color:cyan; font-size:12px;'>R: {reflection:.0f}%</span>", 
+                'text': f"<b>{date}</b><br><span style='color:cyan; font-size:11px;'>Reflect: {reflection:.0f}%</span>", 
                 'font': {'size': 14}, 'x': 0.5
             },
             xaxis=dict(visible=False), 
-            yaxis=dict(range=[0, 4.5], visible=False),
+            yaxis=dict(range=[0, 5], visible=False),
             showlegend=False, barmode='overlay', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
         )
 
