@@ -144,90 +144,96 @@ with g_col2:
     """)
 st.divider()
 
-# --- ORGANIC BANK & LOOPING WAVE SIMULATION ---
-st.subheader("🌀 Pakiri Ledge: Organic Interaction Sim")
+# --- PARAMETRIC BARREL & RECEDING LOOP ---
+st.subheader("🌀 The Ledge: Barrel & Recede Simulation")
 
-# 1. Setup Organic Bank (Flat bottom, steep top)
+# 1. Organic Bank (Flat Low Tide -> Steep High Tide)
 x_range = np.linspace(0, 60, 300)
-# A sigmoid-style curve creates a flat low-tide and a steep high-tide ledge
-y_sand = 5 / (1 + np.exp(-0.15 * (x_range - 35))) 
-# Normalize height to match your slope slider's intent at the midpoint
-y_sand = (y_sand - y_sand.min()) * (slope * 15)
+y_sand = 4 / (1 + np.exp(-0.2 * (x_range - 38))) # Sigmoid curve
+y_sand = (y_sand - y_sand.min()) * (slope * 12) # Scale by your slider
 
 current_tide = now_data['tide_level']
-h_base = now_data['swell_wave_height']
+h_s = now_data['swell_wave_height']
 xi = now_data['xi']
 
-n_frames = 100 # More frames for a smooth recede
+n_frames = 80
 frames = []
 
 for i in range(n_frames):
-    t = i / n_frames # Time 0.0 to 1.0
+    t = i / n_frames # 0.0 to 1.0
     
-    # Define Wave Progress (0.0 to 0.7 is approach, 0.7 to 1.0 is wash/recede)
-    wave_y = np.full_like(x_range, current_tide)
-    foam_x, foam_y = [], []
-    
-    if t < 0.6: # APPROACH & SHOAL
-        crest_x = t * 60
-        # Local slope at the crest location
-        local_idx = np.abs(x_range - crest_x).argmin()
-        local_slope = np.gradient(y_sand)[local_idx]
+    # --- PHASE 1: APPROACH & SHOAL (0.0 to 0.5) ---
+    if t < 0.5:
+        progress = t / 0.5
+        crest_x = progress * 40
+        # Wave grows taller and narrower as it nears the bank
+        shoal_factor = 1 + (crest_x / 45)
+        w_h = h_s * shoal_factor
+        w_w = 12 * (1 - progress*0.5)
         
-        # Wave "Bumps up" based on local steepness
-        dynamic_h = h_base * (1 + (local_slope * 20))
-        wave_pulse = dynamic_h * np.exp(-((x_range - crest_x)**2) / 10)
-        wave_y = np.maximum(wave_y, current_tide + wave_pulse)
+        # Primary Wave Body
+        wave_surface = current_tide + w_h * np.exp(-((x_range - crest_x)**2) / w_w)
         
-    elif t < 0.8: # IMPACT & SURGE UP
-        surge_t = (t - 0.6) / 0.2
-        impact_x = np.abs(y_sand - current_tide).argmin()
-        reach = (h_base * 10) * surge_t
-        
-        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
-        wave_y[mask] = np.maximum(wave_y[mask], y_sand[mask] + 0.2)
-        # Add Foam Line
-        foam_x = [impact_x + reach]
-        foam_y = [y_sand[np.abs(x_range - foam_x[0]).argmin()] + 0.1]
+        # Add a "Lip" that starts to pitch at the very end of approach
+        lip_x, lip_y = [], []
+        if progress > 0.8:
+            pitch = (progress - 0.8) * 5
+            lip_x = [crest_x, crest_x + (pitch * xi)]
+            lip_y = [current_tide + w_h, current_tide + w_h * 0.8]
 
-    else: # RECEDE BACK
-        recede_t = (t - 0.8) / 0.2
-        impact_x = np.abs(y_sand - current_tide).argmin()
-        reach = (h_base * 10) * (1 - recede_t)
+    # --- PHASE 2: THE BREAK & SURGE (0.5 to 0.75) ---
+    elif t < 0.75:
+        progress = (t - 0.5) / 0.25
+        impact_x = 40
+        reach = (h_s * 15 * progress)
         
+        # Water rushes UP the slope
+        wave_surface = np.full_like(x_range, current_tide)
         mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
-        wave_y[mask] = np.maximum(wave_y[mask], y_sand[mask] + 0.1)
+        wave_surface[mask] = y_sand[mask] + 0.2 # Thin film of wash
+        lip_x, lip_y = [], [] # Lip has collapsed into foam
 
-    # ENSURE WATER IS LEVEL & CLIPPED
-    # Level ocean surface + the wave/wash components
-    water_surface = np.maximum(y_sand, wave_y)
+    # --- PHASE 3: THE RECEDE (0.75 to 1.0) ---
+    else:
+        progress = (t - 0.75) / 0.25
+        impact_x = 40
+        reach = (h_s * 15) * (1 - progress)
+        
+        wave_surface = np.full_like(x_range, current_tide)
+        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
+        wave_surface[mask] = y_sand[mask] + 0.1
+        lip_x, lip_y = [], []
+
+    # --- FINAL WATER ASSEMBLY ---
+    # Ensure water is always above sand and level behind the wave
+    total_water = np.maximum(y_sand, wave_surface)
 
     frames.append(go.Frame(
         data=[
-            # The Bank
-            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
-            # The Water Mass
-            go.Scatter(x=x_range, y=water_surface, fill='toself', line=dict(color='rgba(0, 105, 148, 0.8)', width=0), name="Ocean"),
-            # Foam Tip
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=10))
+            # The Bank (Sand)
+            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Sand"),
+            # The Water Mass (Ocean)
+            go.Scatter(x=x_range, y=total_water, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Water"),
+            # The Pitching Lip (White Foam)
+            go.Scatter(x=lip_x, y=lip_y, mode='lines+markers', line=dict(color='white', width=4), marker=dict(size=6)) if lip_x else go.Scatter()
         ],
         name=f'f{i}'
     ))
 
-# Build Figure
-fig_organic = go.Figure(
+# Build and Loop
+fig_ledge = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], title="Distance (m)", showgrid=False),
-        yaxis=dict(range=[0, 7], title="Elevation (m)", showgrid=False),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Start Loop", method="animate", 
-                          args=[None, {"frame": {"duration": 25, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
+        xaxis=dict(range=[0, 60], showgrid=False, zeroline=False),
+        yaxis=dict(range=[0, 6], showgrid=False, zeroline=False),
+        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Run Pakiri Set", method="animate", 
+                          args=[None, {"frame": {"duration": 30, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
         plot_bgcolor='white'
     ),
     frames=frames
 )
 
-st.plotly_chart(fig_organic, use_container_width=True)
+st.plotly_chart(fig_ledge, use_container_width=True)
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
