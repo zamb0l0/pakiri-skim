@@ -144,13 +144,15 @@ with g_col2:
     """)
 st.divider()
 
-# --- PARAMETRIC "HOLLOW" WAVE ENGINE (FIXED) ---
+# --- PARAMETRIC "HOLLOW" WAVE ENGINE (FIXED & WATERTIGHT) ---
 st.subheader("🌀 Pakiri Ledge: Hollow Barrel & Recede")
 
 # 1. The Organic Bank
 x_range = np.linspace(0, 60, 300)
 y_sand = 4 / (1 + np.exp(-0.2 * (x_range - 38)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
+# Add seafloor corners for a solid fill
+x_poly = np.concatenate([[0], x_range, [60, 0]])
 
 current_tide = now_data['tide_level']
 h_s = now_data['swell_wave_height']
@@ -161,81 +163,64 @@ frames = []
 
 for i in range(n_frames):
     t = i / n_frames
-    
-    # Initialize the water surface as a flat line at tide level
     display_y = np.full_like(x_range, current_tide)
     foam_x, foam_y = [], []
 
-    # --- PHASE 1: THE BARREL (Approach) ---
-    if t < 0.6:
+    if t < 0.6: # THE BARREL
         progress = t / 0.6
         crest_x = progress * 40
-        
-        # Create the 'C' Shape (Parametric Arc)
-        # phi from 0 to pi draws the curve from bottom to top
         phi = np.linspace(0, np.pi, 50)
         shoal_h = h_s * (1 + (crest_x/40))
-        
-        # The 'Lip' throws forward based on Iribarren (xi)
         lip_throw = (progress**2) * xi * 2.5
         
-        # Local wave coordinates
         arc_x = crest_x + np.sin(phi) * shoal_h + (phi * lip_throw)
         arc_y = current_tide + (1 - np.cos(phi)) * shoal_h
         
-        # Stitch the arc into the flat tide line using interpolation
-        # This prevents the 'ValueError' by ensuring lengths match
         wave_influence = np.interp(x_range, arc_x, arc_y, left=current_tide, right=current_tide)
         display_y = np.maximum(display_y, wave_influence)
         
-    # --- PHASE 2: THE IMPACT & SPILL (Tea Cup Wash) ---
-    elif t < 0.8:
+    elif t < 0.8: # THE IMPACT
         progress = (t - 0.6) / 0.2
         impact_x = 40
         reach = (h_s * 15 * progress)
-        
         mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
         display_y[mask] = y_sand[mask] + 0.15
-        foam_x = [impact_x + reach]
-        foam_y = [y_sand[np.abs(x_range - foam_x[0]).argmin()] + 0.1]
+        foam_x, foam_y = [impact_x + reach], [y_sand[np.abs(x_range - (impact_x + reach)).argmin()] + 0.1]
 
-    # --- PHASE 3: THE RECEDE (Suck Back) ---
-    else:
+    else: # THE RECEDE
         progress = (t - 0.8) / 0.2
         impact_x = 40
         reach = (h_s * 15) * (1 - progress)
-        
         mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
         display_y[mask] = y_sand[mask] + 0.1
 
-    # Ensure water is always ABOVE sand (Tea Cup Logic)
-    final_y = np.maximum(y_sand, display_y)
+    # Apply Tea Cup Logic & Close Polygon for solid fill
+    y_capped = np.maximum(y_sand, display_y)
+    y_poly = np.concatenate([[0], y_capped, [0, 0]])
 
     frames.append(go.Frame(
         data=[
-            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
-            go.Scatter(x=x_range, y=final_y, fill='toself', line=dict(color='rgba(0, 105, 148, 0.8)', width=0), name="Ocean"),
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=12, symbol='circle'))
+            go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
+            go.Scatter(x=x_poly, y=y_poly, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Ocean"),
+            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=12))
         ],
         name=f'f{i}'
     ))
 
-# Build and Loop
 fig_ledge = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], showgrid=False, zeroline=False),
-        yaxis=dict(range=[0, 7], showgrid=False, zeroline=False),
+        xaxis=dict(range=[0, 60], showgrid=False, zeroline=False, fixedrange=True),
+        yaxis=dict(range=[0, 7], showgrid=False, zeroline=False, fixedrange=True),
         updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Play Set Loop", method="animate", 
-                          args=[None, {"frame": {"duration": 25, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
-        plot_bgcolor='white'
+                          args=[None, {"frame": {"duration": 30, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
+        plot_bgcolor='white', height=400
     ),
     frames=frames
 )
 
 st.plotly_chart(fig_ledge, use_container_width=True)
-
-st.plotly_chart(fig_barrel, use_container_width=True)
+# fig_barrel chart call removed to prevent NameError
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
