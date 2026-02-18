@@ -202,104 +202,102 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- HELPER: GEOMETRY ENGINE (RESTORING THE EXAGGERATION) ---
-def get_extreme_profile(slope_val, xi_val):
-    # POSITION: Move the 'Step' based on slope
-    mu = 90 - (slope_val * 90) 
+# --- DATA FETCHING (Matched to Pakiri & Adjusted Tide) ---
+@st.cache_data(ttl=3600)
+def get_full_data(current_slope):
+    w_url = f"https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LON}&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
+    m_url = f"https://marine-api.open-meteo.com/v1/marine?latitude={LAT}&longitude={LON}&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
     
-    # SHAPE EXAGGERATION: xi ** 3.0 creates the massive visual difference 
-    # between a flat beach and a steep ledge.
-    sigma = 25 / (xi_val ** 3.0) 
+    w_data = requests.get(w_url).json()['hourly']
+    m_data = requests.get(m_url).json()['hourly']
+    df = pd.DataFrame(m_data)
+    df['wind_speed'] = w_data['wind_speed_10m']
+    df['wind_dir'] = w_data['wind_direction_10m']
+    df['time'] = pd.to_datetime(df['time'])
     
-    # 1. The Ledge Face (Gaussian curve)
-    y = 3.6 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    # --- TIDE CALIBRATION ---
+    # Adjusted offset from 1.2 to 1.7 to hit that ~2.4m High Tide peak
+    ref = datetime(2026, 2, 18, 8, 15)
+    df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
+    df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.7
     
-    # 2. The Rising Dune (Diagrammatic rise behind the ledge)
-    y = np.where(x_vals > mu, 3.6 + (0.012 * (x_vals - mu)), y)
+    # Physics Logic
+    tide_modifier = (df['tide_level'] - 1.7) / 2
+    df['dynamic_slope'] = current_slope * (1 + tide_modifier)
+    df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
     
-    return y, mu
+    # Calculate Base Iribarren & Apply Wind Multiplier
+    df['xi_raw'] = df['dynamic_slope'] / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
+    df['wind_mult'] = df.apply(lambda x: get_wind_multiplier(x['wind_dir'], x['wind_speed']), axis=1)
+    df['xi'] = df['xi_raw'] * df['wind_mult']
+    
+    # Reflection & Steepness (H/L)
+    df['R'] = (df['xi']**2) / (df['xi']**2 + 5) * 100
+    df['steepness'] = df['swell_wave_height'] / df['wavelength']
+    
+    return df
 
 # --- EXAGGERATED: BERM DYNAMICS (Architectural Style) ---
+def get_extreme_profile(slope_val, xi_val):
+    mu = 90 - (slope_val * 90) 
+    sigma = 25 / (xi_val ** 3.0) 
+    y = 3.6 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    y = np.where(x_vals > mu, 3.6 + (0.012 * (x_vals - mu)), y)
+    return y, mu
+
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Visuals are **highly exaggerated**. 💥 = Strike Zone. Dimension line measures Tide Height.")
+st.write("Visuals exaggerated for ledge analysis. Tide levels calibrated to Pakiri Local Datum.")
 
-# Ensure data is grouped
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily_geom = df.groupby('date_label').agg({
     'xi':'max', 'tide_level':'max', 'dynamic_slope':'max', 
-    'swell_wave_height':'mean', 'wavelength':'mean', 'R':'max'
+    'swell_wave_height':'mean', 'wavelength':'mean', 'R':'max', 'steepness':'mean'
 }).reindex(df['date_label'].unique())
 
 g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(10, 100, 150) # Increased for smooth spline
+x_vals = np.linspace(10, 100, 150)
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     if pd.isna(row['xi']): continue
     with g_cols[i//5][i%5]:
-        # Call the restored geometry function
         y_vals, ledge_x = get_extreme_profile(row['dynamic_slope'], row['xi'])
-        
-        # Calculate visual slope angle
-        slope_deg = np.degrees(np.arctan(row['dynamic_slope'] * 15)) 
-        
         fig_mini = go.Figure()
 
-        # 1. SMOOTH FILLED PROFILE (Blended Greens/Yellows)
-        fig_mini.add_trace(go.Scatter(
-            x=x_vals, y=y_vals,
-            fill='tozeroy',
-            mode='lines',
+        # 1. Smooth Profile
+        fig_mini.add_trace(go.Scatter(x=x_vals, y=y_vals, fill='tozeroy', mode='lines',
             line=dict(width=3, color='#2ecc71', shape='spline', smoothing=1.3),
-            fillcolor='rgba(46, 204, 113, 0.2)', # Softer Green
-            hoverinfo='none'
-        ))
+            fillcolor='rgba(46, 204, 113, 0.2)', hoverinfo='none'))
 
-        # 2. THE TIDE PLANE (Soft Blue)
-        fig_mini.add_trace(go.Scatter(
-            x=[10, 100], y=[row['tide_level'], row['tide_level']],
-            line=dict(color='rgba(52, 152, 219, 0.5)', width=2),
-            mode='lines', hoverinfo='none'
-        ))
-
-        # 3. ARCHITECTURAL DIMENSION LINE (Vertical Tide Measure)
-        dim_x = 15
-        fig_mini.add_trace(go.Scatter(
-            x=[dim_x, dim_x], y=[0, row['tide_level']],
-            mode='lines',
-            line=dict(color='#2c3e50', width=1),
-            hoverinfo='none'
-        ))
-        # Ticks for dimension line
-        fig_mini.add_trace(go.Scatter(
-            x=[dim_x-2, dim_x+2, None, dim_x-2, dim_x+2],
-            y=[0, 0, None, row['tide_level'], row['tide_level']],
-            mode='lines', line=dict(color='#2c3e50', width=1), hoverinfo='none'
-        ))
-
-        # 4. ANNOTATIONS
-        # Tide Height Label
-        fig_mini.add_annotation(x=dim_x+12, y=row['tide_level']/2, text=f"{row['tide_level']:.1f}m", 
-                                showarrow=False, font=dict(size=10, family="monospace", color="#2c3e50"))
+        # 2. Tide Plane & Architectural Dimension
+        fig_mini.add_trace(go.Scatter(x=[10, 100], y=[row['tide_level'], row['tide_level']],
+            line=dict(color='rgba(52, 152, 219, 0.5)', width=2), mode='lines'))
         
-        # Ledge Strike
+        dim_x = 15
+        fig_mini.add_trace(go.Scatter(x=[dim_x, dim_x], y=[0, row['tide_level']], mode='lines', line=dict(color='#2c3e50', width=1)))
+        
+        # 3. Wave Steepness Indicator (The "Architectural Detail")
+        steep_color = "orange" if row['steepness'] > 0.03 else "cyan"
+        fig_mini.add_annotation(x=80, y=4.5, text=f"H/L: {row['steepness']:.3f}", 
+                                showarrow=False, font=dict(size=9, color=steep_color, family="monospace"))
+
+        fig_mini.add_annotation(x=dim_x+12, y=row['tide_level']/2, text=f"{row['tide_level']:.1f}m", 
+                                showarrow=False, font=dict(size=10, family="monospace"))
+        
         if row['xi'] > 1.3:
             fig_mini.add_annotation(x=ledge_x, y=row['tide_level']+0.4, text="💥", showarrow=False, font=dict(size=20))
         
-        fig_mini.update_layout(
-            height=260, margin=dict(l=0, r=0, t=50, b=0),
-            title={'text': f"<b>{date}</b><br><span style='font-size:10px; color:gray;'>R: {row['R']:.0f}% | {slope_deg:.1f}°</span>", 'x': 0.5},
-            xaxis=dict(visible=False), 
-            yaxis=dict(range=[0, 5.5], visible=False),
-            showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
-        )
+        fig_mini.update_layout(height=260, margin=dict(l=0, r=0, t=50, b=0),
+            title={'text': f"<b>{date}</b><br><span style='font-size:10px; color:gray;'>R: {row['R']:.0f}%</span>", 'x': 0.5},
+            xaxis=dict(visible=False), yaxis=dict(range=[0, 6.0], visible=False),
+            showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
 
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
         
-        # BUILDING/ERODING FLAG
-        v_state = "BUILDING" if (row['swell_wave_height']/row['wavelength']) < 0.02 else "ERODING"
-        v_color = "#27ae60" if v_state == "BUILDING" else "#7f8c8d"
-        st.markdown(f"<div style='text-align:center; font-size:10px; color:{v_color}; font-family:monospace;'>BANK {v_state}</div>", unsafe_allow_html=True)
+        # BANK STATUS WITH STEEPNESS LOGIC
+        v_state = "BUILDING (LONG PERIOD)" if row['steepness'] < 0.025 else "ERODING (STEEP)"
+        v_color = "#27ae60" if "BUILDING" in v_state else "#e67e22"
+        st.markdown(f"<div style='text-align:center; font-size:9px; color:{v_color}; font-family:monospace;'>{v_state}</div>", unsafe_allow_html=True)
         
 # --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
