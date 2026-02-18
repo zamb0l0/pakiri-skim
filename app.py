@@ -48,21 +48,32 @@ def get_full_forecast():
 df = get_full_forecast()
 
 # --- TRAFFIC LIGHT LOGIC ---
-def get_color_class(xi, period, direction):
-    # 🔵 BLUE: The "Dec 8th" Berm (Long Period + High Iribarren)
-    if xi > 1.6 and period > 13:
-        return "bg-blue", "🏆 BEST EVER (Dec 8th Berm)"
+def get_color_class(xi, h, t, direction, wind_dir):
+    # 1. Start with the Iribarren Physics
+    score = xi * 10 
     
-    # 🌀 CYAN: The "Oct 5th" Peeler (North Swell + Rivermouth Bank)
-    if direction < 45 and xi > 1.1:
-        return "bg-blue", "🌪️ RIVERMOUTH WRAP (Oct 5th Mode)"
+    # 2. Add your 'Goldilocks' Height Bonus (0.3m - 0.6m is the sweet spot)
+    if 0.3 <= h <= 0.6: score += 5
+    elif 0.6 < h <= 0.9: score += 2
+    elif h > 1.2: score -= 5 # Too big, washes out the ledge
     
-    # Standard Traffic Lights
-    if xi > 1.2: return "bg-darkgreen", "GOLDEN LEDGE"
-    if xi > 0.9: return "bg-lightgreen", "GOOD"
-    if xi > 0.7: return "bg-yellow", "AVERAGE"
-    if xi > 0.4: return "bg-orange", "MUSH"
-    return "bg-red", "FLAT"
+    # 3. Add your Period Logic
+    if t >= 11: score += 5  # "Ledge Builder"
+    elif t <= 8: score += 3 # "Clean Peaks"
+    else: score -= 2        # The 9s-10s "Dead Zone"
+
+    # 4. Wind/Direction Logic (N swell + SW/W winds)
+    is_north_swell = direction < 45
+    is_offshore = wind_dir in ['W', 'SW', 'SSW']
+    
+    if is_north_swell and is_offshore: score += 10
+    
+    # --- FINAL TRAFFIC LIGHTS ---
+    if score > 25: return "bg-blue", "🏆 LEGENDARY (Expert Match)"
+    if score > 18: return "bg-darkgreen", "🔥 PREMIUM"
+    if score > 14: return "bg-lightgreen", "GOOD"
+    if score > 10: return "bg-yellow", "AVERAGE"
+    return "bg-red", "WASHED OUT"
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Ledge Forecast")
