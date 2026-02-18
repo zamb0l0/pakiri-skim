@@ -144,6 +144,56 @@ with g_col2:
     """)
 st.divider()
 
+# --- TOPOGRAPHICAL SECTION ---
+st.subheader("📐 Beach Profile: Current Interaction")
+
+# Calculate the cross-section
+x_beach = np.linspace(0, 50, 100)  # 50 meters of beach width
+y_beach = x_beach * slope          # Elevation based on your slider
+
+# Current water height (normalized for the graphic)
+current_water_height = now_data['tide_level'] 
+
+fig_topo = go.Figure()
+
+# 1. Plot the Sand
+fig_topo.add_trace(go.Scatter(
+    x=x_beach, y=y_beach, 
+    fill='toself', mode='lines', 
+    line=dict(color='burlywood', width=4),
+    name='Beach Gradient'
+))
+
+# 2. Plot the Water (Dynamic based on tide)
+# We calculate where the tide hits the slope
+water_x = [0, 50, 50, 0]
+water_y = [current_water_height, current_water_height, 0, 0]
+
+fig_topo.add_trace(go.Scatter(
+    x=water_x, y=water_y, 
+    fill='toself', mode='lines', 
+    line=dict(color='rgba(41, 128, 185, 0.5)', width=0),
+    name='Current Tide'
+))
+
+# 3. Highlight the "Ledge Zone" (The top of the berm)
+fig_topo.add_annotation(
+    x=current_water_height/slope, y=current_water_height,
+    text="LIVE WATER LINE", showarrow=True, arrowhead=1,
+    ax=-40, ay=-40, bgcolor="white"
+)
+
+fig_topo.update_layout(
+    height=300,
+    xaxis=dict(title="Distance from Low Tide Mark (m)", range=[0, 50]),
+    yaxis=dict(title="Elevation (m)", range=[0, 5]),
+    showlegend=False,
+    margin=dict(t=20, b=20)
+)
+
+st.plotly_chart(fig_topo, use_container_width=True)
+st.caption(f"Visualizing how the current {now_data['tide_level']:.1f}m tide interacts with your {slope:.4f} gradient.")
+
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
 
