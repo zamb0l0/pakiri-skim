@@ -144,20 +144,20 @@ with g_col2:
     """)
 st.divider()
 
-# --- TOPOGRAPHICAL SECTION WITH WAVE IMPACT ---
-st.subheader("📐 Beach Profile & Wave Impact Zone")
+# --- TOPOGRAPHICAL SECTION WITH BREAKING WAVE PROFILE ---
+st.subheader("📐 Beach Profile & Breaking Wave Geometry")
 
 # 1. Geometry Setup
 x_beach = np.linspace(0, 60, 100) 
 y_beach = x_beach * slope          
 current_tide = now_data['tide_level']
 
-# 2. Physics: Calculate Wave Run-up (Simplified Hunt's Formula logic)
-# Higher period and height = further reach up the beach
-run_up_height = (now_data['swell_wave_height'] * 0.7) + (now_data['swell_wave_period'] * 0.05)
-total_reach_height = current_tide + run_up_height
+# 2. Wave Physics for the "Lip"
+h_s = now_data['swell_wave_height']
 impact_x = current_tide / slope
-reach_x = total_reach_height / slope
+# The 'lip' height is based on swell height; its 'throw' is based on the Iribarren number (xi)
+lip_height = h_s * 0.8
+lip_throw = now_data['xi'] * 2 # Higher xi = further throw (hollower)
 
 fig_topo = go.Figure()
 
@@ -169,43 +169,44 @@ fig_topo.add_trace(go.Scatter(
     name='Beach Gradient'
 ))
 
-# Plot the Mean Water Level (Tide)
+# Plot the Ocean (The Body)
 fig_topo.add_trace(go.Scatter(
     x=[0, impact_x, impact_x, 0], 
     y=[current_tide, current_tide, 0, 0], 
     fill='toself', mode='lines', 
-    line=dict(color='rgba(41, 128, 185, 0.8)', width=0),
+    line=dict(color='rgba(41, 128, 185, 0.7)', width=0),
     name='Tide Level'
 ))
 
-# Plot the Wave Impact Zone (The Pulse)
-# This represents where the wave actually breaks and rushes up
+# 3. DRAW THE BREAKING WAVE (The "Animation" Frame)
+# This creates a curve that looks like a plunging wave lip
+wave_x = [impact_x - lip_throw, impact_x - (lip_throw*0.5), impact_x, impact_x]
+wave_y = [current_tide, current_tide + lip_height, current_tide + (lip_height*0.5), current_tide]
+
 fig_topo.add_trace(go.Scatter(
-    x=[impact_x, reach_x, impact_x], 
-    y=[current_tide, total_reach_height, current_tide], 
+    x=wave_x, y=wave_y, 
     fill='toself', mode='lines', 
-    line=dict(color='rgba(255, 255, 255, 0.4)', width=1),
-    name='Wave Run-up/Impact'
+    line=dict(color='rgba(255, 255, 255, 0.9)', width=2),
+    name='Breaking Lip'
 ))
 
-# Annotations for "The Ledge"
+# Annotate the "Pocket"
 if now_data['xi'] > 1.2:
     fig_topo.add_annotation(
-        x=impact_x, y=current_tide,
-        text="💥 LEDGE IMPACT", font=dict(color="red", size=14),
-        showarrow=True, arrowhead=2, arrowcolor="red", ax=50, ay=-50
+        x=impact_x - (lip_throw*0.5), y=current_tide + (lip_height*0.2),
+        text="🌀 THE POCKET", font=dict(color="white", size=10),
+        showarrow=False, bgcolor="rgba(0,0,0,0.3)"
     )
 
 fig_topo.update_layout(
     height=400,
-    xaxis=dict(title="Distance from Low Tide (m)", range=[0, 60], gridcolor='rgba(0,0,0,0.05)'),
-    yaxis=dict(title="Elevation (m)", range=[0, 6], gridcolor='rgba(0,0,0,0.05)'),
+    xaxis=dict(title="Distance from Low Tide (m)", range=[0, 60]),
+    yaxis=dict(title="Elevation (m)", range=[0, 6]),
     plot_bgcolor='white',
     showlegend=False
 )
 
 st.plotly_chart(fig_topo, use_container_width=True)
-st.caption(f"The white zone shows the surge reach ({run_up_height:.1f}m vertical) based on current swell energy.")
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
