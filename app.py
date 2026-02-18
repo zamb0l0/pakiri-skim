@@ -116,6 +116,7 @@ with g_col1:
                  'steps': [{'range': [0, 0.8], 'color': '#ff4b4b'}, {'range': [0.8, 1.2], 'color': '#ffa500'},
                            {'range': [1.2, 1.5], 'color': '#2ecc71'}, {'range': [1.5, 2.5], 'color': '#1b5e20'}]}
     ))
+    # Margin fix for Gauge Title
     fig_gauge.update_layout(height=400, margin=dict(t=120, b=20, l=30, r=30))
     st.plotly_chart(fig_gauge, use_container_width=True)
 
@@ -189,7 +190,12 @@ for i, (date, row) in enumerate(daily.iterrows()):
     color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['wind_dir'], row['wind_speed'], row['tide_level'])
     tide_dt = get_high_tide_dt(row['time'])
     
+    # FORMATTED WINDOW
+    session_start = (tide_dt - timedelta(hours=1)).strftime('%I:%M')
+    session_end = (tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')
+
     with cols[i//5][i%5]:
+        # Using f-string to ensure HTML renders properly
         st.markdown(f"""
             <div class='card {color}'>
                 <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
@@ -208,7 +214,7 @@ for i, (date, row) in enumerate(daily.iterrows()):
                 </div>
 
                 <div class='session-time' style='margin-top: 10px;'>
-                    🎯 Best: {(tide_dt - timedelta(hours=1)).strftime('%I:%M')} - {(tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')}
+                    🎯 Best: {session_start} - {session_end}
                 </div>
                 
                 <hr style='margin:10px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
@@ -216,7 +222,7 @@ for i, (date, row) in enumerate(daily.iterrows()):
             </div>
             """, unsafe_allow_html=True)
 
-# --- SCROLLABLE CHART ---
+# --- CHART ---
 st.divider()
 st.subheader("📈 Quality vs Tide")
 fig = go.Figure()
