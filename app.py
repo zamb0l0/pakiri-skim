@@ -153,136 +153,138 @@ st.divider()
 
 import numpy as np
 import plotly.graph_objects as go
+import streamlit as st
 
-# --- 1. SETUP CONSTANTS ---
-n_frames = 60 # Reduced for smoothness/less flickering
-x_range = np.linspace(0, 60, 200)
+# --- 1. SETUP ---
+# Doubled frames to 120 and slowed duration to 50ms for "half speed"
+n_frames = 120 
+x_base = np.linspace(0, 60, 150)
 
-# The Sandbank (Solid cross-section)
-y_sand = 4 / (1 + np.exp(-0.25 * (x_range - 40)))
+# The Bank (Static)
+y_sand = 4 / (1 + np.exp(-0.25 * (x_base - 42)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
 
-# Dynamic variables from your data
+# Get current data
 h_s = now_data['swell_wave_height']
-xi = now_data['xi']
+xi = now_data['xi']  # Iribarren number
 tide = now_data['tide_level']
 
 frames = []
 
 for i in range(n_frames):
     t = i / n_frames
-    # Water surface starts exactly on top of the sand
-    y_water = np.copy(y_sand)
     
-    # --- PHASE A: THE ROUNDED LUMP (0.0 - 0.4) ---
-    if t < 0.4:
-        p = t / 0.4
-        crest_x = p * 38
-        # "Lump" height grows as it approaches the bank
-        amp = h_s * (1 + p * 0.5)
-        # Use a Gaussian curve for a "round lump" look
-        width = 8 - (p * 3) # Gets narrower/steeper
-        y_wave = amp * np.exp(-((x_range - crest_x)**2) / (2 * width**2))
-        y_water = np.maximum(y_water, tide + y_wave)
-        lip_x, lip_y = [None], [None]
+    # Define the core "Water Path"
+    # We build this as a list of (x, y) points to allow overhangs
+    path_x = []
+    path_y = []
 
-    # --- PHASE B: THE PITCH & BARREL (0.4 - 0.7) ---
+    # --- PHASE 1: THE GROWING LUMP (0.0 - 0.3) ---
+    if t < 0.3:
+        p = t / 0.3
+        crest_x = p * 35
+        amp = tide + (h_s * (1 + p * 0.4))
+        
+        # Draw a rounded hump
+        path_x = list(x_base)
+        path_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * (7-p*2)**2))) 
+                  for j, x in enumerate(x_base)]
+
+    # --- PHASE 2: THE PITCHING BARREL (0.3 - 0.7) ---
     elif t < 0.7:
-        p = (t - 0.4) / 0.3
-        crest_x = 38 + (p * 4)
-        amp = h_s * 1.5
+        p = (t - 0.3) / 0.4
+        crest_x = 35 + (p * 5)
+        amp = tide + (h_s * 1.4)
         
-        # Main body of the wave (the "Wall")
-        y_wave = amp * np.exp(-((x_range - (crest_x - 2))**2) / (2 * 4**2))
-        y_water = np.maximum(y_water, tide + y_wave)
+        # 1. Back of wave (Normal curve)
+        back_x = np.linspace(0, crest_x, 50)
+        back_y = [max(np.interp(x, x_base, y_sand), tide + (amp-tide) * np.exp(-((x - crest_x)**2) / (2 * 6**2))) 
+                  for x in back_x]
         
-        # THE LIP: A parametric 'C' shape for the barrel
-        # Throw distance is driven by Iribarren (xi)
-        throw = p * (xi * 6)
-        drop = 8 * (p**2)
-        phi = np.linspace(-np.pi/2, np.pi, 20)
-        lip_x = crest_x + (throw * np.cos(phi/2))
-        lip_y = (tide + amp) - drop + (amp * 0.3 * np.sin(phi))
+        # 2. The Pitching Lip (Parametric "C" Shape)
+        # Higher xi = further throw
+        throw = p * (xi * 5)
+        drop = 7 * (p**1.5)
         
-    # --- PHASE C: THE REFLECTION/SWASH (0.7 - 1.0) ---
+        # Theta creates the 'hollow' curve
+        theta = np.linspace(0, np.pi * 1.1, 30)
+        # Radius of the barrel tube
+        r = (h_s * 0.6) 
+        
+        lip_x = crest_x + (throw * p) + r * np.sin(theta)
+        lip_y = amp - (drop * p) + r * np.cos(theta)
+        
+        # 3. Combine paths
+        path_x = list(back_x) + list(lip_x)
+        path_y = list(back_y) + list(lip_y)
+        
+        # Add the remaining shore (water sitting on sand)
+        shore_x = np.linspace(max(lip_x), 60, 50)
+        shore_y = [np.interp(x, x_base, y_sand) for x in shore_x]
+        path_x += list(shore_x)
+        path_y += list(shore_y)
+
+    # --- PHASE 3: THE REFLECTION / SWASH (0.7 - 1.0) ---
     else:
         p = (t - 0.7) / 0.3
         impact_x = 42
-        # Reflection/Swash reach
-        reach = (h_s * 15) * np.sin(p * np.pi) 
-        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
-        # Water thins out as it reflects
-        y_water[mask] = y_sand[mask] + (0.3 * (1 - p))
-        lip_x, lip_y = [None], [None]
+        # Surge up the bank
+        reach = (h_s * 15) * np.sin(p * np.pi)
+        
+        path_x = list(x_base)
+        path_y = []
+        for j, x in enumerate(x_base):
+            if x < impact_x:
+                path_y.append(max(y_sand[j], tide + (h_s * 0.2 * (1-p))))
+            elif impact_x <= x <= impact_x + reach:
+                # Water reflecting/thinning on bank
+                path_y.append(y_sand[j] + (0.3 * (1-p)))
+            else:
+                path_y.append(y_sand[j])
 
-    # --- 2. CREATE FRAME ---
+    # --- CREATE THE SOLID POLYGONS ---
+    # We close the water path by going back along the bottom to the start
+    water_fill_x = path_x + [60, 0]
+    water_fill_y = path_y + [0, 0]
+    
+    # We close the sand path
+    sand_fill_x = list(x_base) + [60, 0]
+    sand_fill_y = list(y_sand) + [0, 0]
+
     frames.append(go.Frame(
         data=[
-            # SAND LAYER
-            go.Scatter(x=x_range, y=y_sand, fill='tozeroy', 
-                       fillcolor='#C2B280', line=dict(color='#A68D60', width=2)),
-            # WATER LAYER (sitting on sand)
-            go.Scatter(x=x_range, y=y_water, fill='tonexty', 
-                       fillcolor='rgba(0, 105, 148, 0.6)', line=dict(color='#006994', width=2)),
-            # LIP/BARREL LAYER
-            go.Scatter(x=lip_x, y=lip_y, mode='lines', 
-                       line=dict(color='white', width=4))
+            # SAND (Bottom Layer)
+            go.Scatter(x=sand_fill_x, y=sand_fill_y, fill='toself', 
+                       fillcolor='#C2B280', line=dict(color='#A68D60', width=1), hoverinfo='skip'),
+            # WATER (Top Layer)
+            go.Scatter(x=water_fill_x, y=water_fill_y, fill='toself', 
+                       fillcolor='rgba(0, 105, 148, 0.7)', line=dict(color='#006994', width=2), hoverinfo='skip')
         ],
         name=f'f{i}'
     ))
 
-# --- 3. CONFIGURE PLOT ---
+# --- PLOT CONFIG ---
 fig_ledge = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], autorange=False, showgrid=False, zeroline=False),
-        yaxis=dict(range=[0, 8], autorange=False, showgrid=False, zeroline=False),
+        xaxis=dict(range=[0, 60], fixedrange=True, showgrid=False, zeroline=False),
+        yaxis=dict(range=[0, 8], fixedrange=True, showgrid=False, zeroline=False),
         updatemenus=[{
             "type": "buttons",
             "buttons": [{
-                "label": "🌊 Play Wave Cycle",
+                "label": "🌊 Play Slow-Mo Cycle",
                 "method": "animate",
-                "args": [None, {"frame": {"duration": 33, "redraw": False}, "fromcurrent": True, "transition": {"duration": 0}}]
+                "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]
             }]
         }],
         plot_bgcolor='white',
-        margin=dict(l=0, r=0, t=0, b=0)
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=400
     ),
     frames=frames
 )
 
 st.plotly_chart(fig_ledge, use_container_width=True)
-
-# --- 10-DAY GRID ---
-st.subheader("10-Day Skim Forecast")
-
-df['date_label'] = df['time'].dt.strftime('%a, %b %d')
-daily = df.groupby('date_label').agg({
-    'xi': 'max', 'swell_wave_height': 'mean', 
-    'swell_wave_period': 'max', 'swell_wave_direction': 'mean',
-    'wind_dir': 'mean', 'wind_speed': 'max', 'time': 'first', 'tide_level': 'max'
-}).reindex(df['date_label'].unique())
-
-cols = [st.columns(5), st.columns(5)]
-for i, (date, row) in enumerate(daily.iterrows()):
-    color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'], row['tide_level'])
-    tide_dt = get_high_tide_dt(row['time'])
-    session_start = (tide_dt - timedelta(hours=1)).strftime('%I:%M')
-    session_end = (tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')
-    
-    with cols[i//5][i%5]:
-        st.markdown(f"""
-            <div class='card {color}'>
-                <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
-                <div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
-                <div style='font-size: 1.0em;'>🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s</div>
-                <div style='font-size: 0.85em; opacity: 0.9;'>Swell: {get_arrow_with_name(row['swell_wave_direction'])}</div>
-                <div style='font-size: 0.85em; opacity: 0.9;'>Wind: {get_arrow_with_name(row['wind_dir'])}</div>
-                <div class='session-time'>🎯 Best: {session_start} - {session_end}</div>
-                <hr style='margin:8px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
-                <div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
-            </div>
-            """, unsafe_allow_html=True)
 
 # --- SCROLLABLE CHART ---
 st.divider()
