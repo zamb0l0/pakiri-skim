@@ -156,17 +156,16 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # --- 1. SETUP ---
-# Doubled frames to 120 and slowed duration to 50ms for "half speed"
+# Slowed down: 120 frames at 50ms = 6 second cycle
 n_frames = 120 
-x_base = np.linspace(0, 60, 150)
+x_base = np.linspace(0, 60, 200)
 
 # The Bank (Static)
 y_sand = 4 / (1 + np.exp(-0.25 * (x_base - 42)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
 
-# Get current data
 h_s = now_data['swell_wave_height']
-xi = now_data['xi']  # Iribarren number
+xi = now_data['xi'] 
 tide = now_data['tide_level']
 
 frames = []
@@ -174,112 +173,95 @@ frames = []
 for i in range(n_frames):
     t = i / n_frames
     
-    # Define the core "Water Path"
-    # We build this as a list of (x, y) points to allow overhangs
+    # We build a single closed loop for the water
     path_x = []
     path_y = []
 
-    # --- PHASE 1: THE GROWING LUMP (0.0 - 0.3) ---
-    if t < 0.3:
-        p = t / 0.3
-        crest_x = p * 35
-        amp = tide + (h_s * (1 + p * 0.4))
+    # --- STAGES B-D: THE ROUND LUMP (0.0 - 0.4) ---
+    if t < 0.4:
+        p = t / 0.4
+        crest_x = p * 40
+        amp = h_s * (1 + p * 0.5)
+        # Rounder lump using Gaussian curve
+        width = 8 - (p * 4) 
         
-        # Draw a rounded hump
-        path_x = list(x_base)
-        path_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * (7-p*2)**2))) 
-                  for j, x in enumerate(x_base)]
+        # Build surface
+        surface_x = list(x_base)
+        surface_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * width**2))) 
+                     for j, x in enumerate(x_base)]
+        path_x, path_y = surface_x, surface_y
 
-    # --- PHASE 2: THE PITCHING BARREL (0.3 - 0.7) ---
-    elif t < 0.7:
-        p = (t - 0.3) / 0.4
-        crest_x = 35 + (p * 5)
-        amp = tide + (h_s * 1.4)
+    # --- STAGES E-G: THE PITCHING BARREL (0.4 - 0.75) ---
+    elif t < 0.75:
+        p = (t - 0.4) / 0.35
+        crest_x = 40 + (p * 5)
+        amp = h_s * 1.6
         
-        # 1. Back of wave (Normal curve)
-        back_x = np.linspace(0, crest_x, 50)
-        back_y = [max(np.interp(x, x_base, y_sand), tide + (amp-tide) * np.exp(-((x - crest_x)**2) / (2 * 6**2))) 
+        # 1. Back of wave
+        back_x = np.linspace(0, crest_x, 80)
+        back_y = [max(np.interp(x, x_base, y_sand), tide + amp * np.exp(-((x - crest_x)**2) / (2 * 6**2))) 
                   for x in back_x]
         
-        # 2. The Pitching Lip (Parametric "C" Shape)
-        # Higher xi = further throw
-        throw = p * (xi * 5)
-        drop = 7 * (p**1.5)
+        # 2. The Overhanging Lip (The 'C' Curve)
+        # Higher Iribarren (xi) = More 'Throw' forward
+        throw = p * (xi * 6)
+        drop = 8 * (p**1.8)
+        phi = np.linspace(0, np.pi * 1.1, 40) # This creates the loop
+        r = (h_s * 0.7) # Radius of the barrel
         
-        # Theta creates the 'hollow' curve
-        theta = np.linspace(0, np.pi * 1.1, 30)
-        # Radius of the barrel tube
-        r = (h_s * 0.6) 
+        lip_x = crest_x + (throw) + r * np.sin(phi)
+        lip_y = (tide + amp) - drop + r * np.cos(phi)
         
-        lip_x = crest_x + (throw * p) + r * np.sin(theta)
-        lip_y = amp - (drop * p) + r * np.cos(theta)
-        
-        # 3. Combine paths
-        path_x = list(back_x) + list(lip_x)
-        path_y = list(back_y) + list(lip_y)
-        
-        # Add the remaining shore (water sitting on sand)
-        shore_x = np.linspace(max(lip_x), 60, 50)
+        # 3. Connection to shore
+        shore_x = np.linspace(max(lip_x), 60, 80)
         shore_y = [np.interp(x, x_base, y_sand) for x in shore_x]
-        path_x += list(shore_x)
-        path_y += list(shore_y)
+        
+        path_x = list(back_x) + list(lip_x) + list(shore_x)
+        path_y = list(back_y) + list(lip_y) + list(shore_y)
 
-    # --- PHASE 3: THE REFLECTION / SWASH (0.7 - 1.0) ---
+    # --- STAGE H: REFLECTION & SWASH (0.75 - 1.0) ---
     else:
-        p = (t - 0.7) / 0.3
+        p = (t - 0.75) / 0.25
         impact_x = 42
-        # Surge up the bank
+        # Surge and Reflect
         reach = (h_s * 15) * np.sin(p * np.pi)
         
         path_x = list(x_base)
         path_y = []
         for j, x in enumerate(x_base):
             if x < impact_x:
-                path_y.append(max(y_sand[j], tide + (h_s * 0.2 * (1-p))))
+                path_y.append(max(y_sand[j], tide + (h_s * 0.1 * (1-p))))
             elif impact_x <= x <= impact_x + reach:
-                # Water reflecting/thinning on bank
-                path_y.append(y_sand[j] + (0.3 * (1-p)))
+                path_y.append(y_sand[j] + (0.3 * (1-p))) # Thin swash sheet
             else:
                 path_y.append(y_sand[j])
 
-    # --- CREATE THE SOLID POLYGONS ---
-    # We close the water path by going back along the bottom to the start
-    water_fill_x = path_x + [60, 0]
-    water_fill_y = path_y + [0, 0]
-    
-    # We close the sand path
-    sand_fill_x = list(x_base) + [60, 0]
-    sand_fill_y = list(y_sand) + [0, 0]
+    # --- CLOSE THE POLYGON (Avoid water under sand) ---
+    # We go from the end of the surface, down to 0, back to start, and up
+    full_x = path_x + [60, 0]
+    full_y = path_y + [0, 0]
 
     frames.append(go.Frame(
         data=[
-            # SAND (Bottom Layer)
-            go.Scatter(x=sand_fill_x, y=sand_fill_y, fill='toself', 
+            # Sand Layer (Drawn first)
+            go.Scatter(x=list(x_base) + [60, 0], y=list(y_sand) + [0, 0], fill='toself', 
                        fillcolor='#C2B280', line=dict(color='#A68D60', width=1), hoverinfo='skip'),
-            # WATER (Top Layer)
-            go.Scatter(x=water_fill_x, y=water_fill_y, fill='toself', 
+            # Water Layer (Drawn on top)
+            go.Scatter(x=full_x, y=full_y, fill='toself', 
                        fillcolor='rgba(0, 105, 148, 0.7)', line=dict(color='#006994', width=2), hoverinfo='skip')
         ],
         name=f'f{i}'
     ))
 
-# --- PLOT CONFIG ---
+# --- RENDER ---
 fig_ledge = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
         xaxis=dict(range=[0, 60], fixedrange=True, showgrid=False, zeroline=False),
-        yaxis=dict(range=[0, 8], fixedrange=True, showgrid=False, zeroline=False),
-        updatemenus=[{
-            "type": "buttons",
-            "buttons": [{
-                "label": "🌊 Play Slow-Mo Cycle",
-                "method": "animate",
-                "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]
-            }]
-        }],
-        plot_bgcolor='white',
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=400
+        yaxis=dict(range=[0, 9], fixedrange=True, showgrid=False, zeroline=False),
+        updatemenus=[{"type": "buttons", "buttons": [{"label": "🌊 Play Ledge Cycle", "method": "animate", 
+                     "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]}]}],
+        plot_bgcolor='white', height=450, margin=dict(l=0, r=0, t=0, b=0)
     ),
     frames=frames
 )
