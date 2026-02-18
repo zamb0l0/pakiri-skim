@@ -173,61 +173,69 @@ for i in range(n_frames):
     display_y = np.full_like(x_range, current_tide)
     foam_x, foam_y, spray_x, spray_y = [], [], [], []
 
-    # 1. WAVE SHOALING & PITCHING (t: 0.0 -> 0.6)
-    if t < 0.6:
-        progress = t / 0.6
-        # Crest moves from deep water toward the berm (x=40)
-        crest_x = progress * 40
-        dynamic_h = h_s * (1 + (progress * 0.5)) # Wave grows as it shoals
-        
-        # We build the wave using a Trochoidal-style curve for that "peaked" look
+    # --- STAGES B-D: THE SHOAL ---
+    if t < 0.3:
+        progress = t / 0.3
+        crest_x = progress * 30
+        # Steep front face, gentle back (Trochoid approximation)
         for j, x in enumerate(x_range):
             dist = x - crest_x
-            # The 'steepness' of the face increases as it nears the berm
-            face_steepness = 0.2 + (progress * 0.3)
-            if dist < 0: # Back of the wave
-                display_y[j] = current_tide + dynamic_h * np.exp(-0.05 * abs(dist))
-            else: # Face of the wave
-                display_y[j] = current_tide + dynamic_h * np.exp(-face_steepness * abs(dist))
+            if dist < 0:
+                display_y[j] = current_tide + h_s * np.exp(0.1 * dist)
+            else:
+                display_y[j] = current_tide + h_s * np.exp(-0.4 * dist)
 
-        # THE LIP: Only starts curling after 40% of the cycle
-        if progress > 0.4:
-            lip_progress = (progress - 0.4) / 0.6
-            # The lip "throws" forward based on xi
-            throw_dist = lip_progress * (xi * 5)
-            # Parabolic arc for the falling lip
-            drop = 4 * (lip_progress**2)
-            
-            # Create the 'C' shape of the barrel
-            phi = np.linspace(0, np.pi, 20)
-            spray_x = crest_x + throw_dist + (np.sin(phi) * dynamic_h * 0.5)
-            spray_y = (current_tide + dynamic_h) - drop + (np.cos(phi) * dynamic_h * 0.5)
+    # --- STAGES E-G: THE PLUNGING LIP (THE "THROW") ---
+    elif t < 0.65:
+        progress = (t - 0.3) / 0.35
+        crest_x = 30 + (progress * 10)
+        
+        # Base Wave Body
+        for j, x in enumerate(x_range):
+            dist = x - crest_x
+            display_y[j] = current_tide + h_s * np.exp(-0.5 * abs(dist)) if dist > 0 else current_tide + h_s * np.exp(0.1 * dist)
 
-    # 2. THE IMPACT & WHITEWASH (t: 0.6 -> 0.8)
-    elif t < 0.8:
-        progress = (t - 0.6) / 0.2
+        # The Projectile Lip (Geometry from your diagram)
+        # It curves out and then down
+        lip_x_base = crest_x
+        # Throw distance based on Iribarren (xi)
+        throw = progress * (xi * 4) 
+        drop = 5 * (progress**2) # Gravity acceleration
+        
+        phi = np.linspace(0, np.pi * 0.9, 30)
+        spray_x = lip_x_base + (throw * np.sin(phi/1.5))
+        spray_y = (current_tide + h_s) - drop + (h_s * 0.2 * np.cos(phi))
+        
+        # Offshore spray (Wind effect)
+        if now_data['wind_speed'] > 15 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S']:
+            spray_x = np.append(spray_x, [crest_x - 2, crest_x - 5])
+            spray_y = np.append(spray_y, [current_tide + h_s + 0.5, current_tide + h_s + 1.2])
+
+    # --- STAGE H: IMPACT & THINNING SWASH ---
+    elif t < 0.85:
+        progress = (t - 0.65) / 0.2
         impact_x = 40
-        swash_reach = (h_s * 12) * np.sqrt(progress) # Fast start, slow end
+        swash_reach = (h_s * 15) * np.sin(progress * (np.pi/2))
         
-        # Water follows the sand exactly here
+        # The "Sheet" of water following the sand slope
         mask = (x_range >= impact_x) & (x_range <= impact_x + swash_reach)
-        display_y[mask] = y_sand[mask] + (0.3 * (1 - progress)) # Thins as it climbs
+        # Water thins out as it reaches max height
+        thickness = 0.25 * (1 - (progress * 0.8))
+        display_y[mask] = y_sand[mask] + thickness
         
-        # Whitewash (Turbulence) - Random clusters of particles
-        foam_x = np.random.normal(impact_x + swash_reach, 1.5, 20)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.4 for val in foam_x]
+        # Whitewash / Foam Clusters
+        foam_x = np.random.uniform(impact_x, impact_x + swash_reach, 25)
+        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.2 for val in foam_x]
 
-    # 3. THE RECEDE / BACKWASH (t: 0.8 -> 1.0)
+    # --- THE RECEDE (BACKWASH) ---
     else:
-        progress = (t - 0.8) / 0.2
-        # Water pulls back into the next trough
-        reach = (h_s * 12) * (1 - progress)
-        mask = (x_range >= 35) & (x_range <= 40 + reach)
-        display_y[mask] = y_sand[mask] + 0.1
+        progress = (t - 0.85) / 0.15
+        reach = (h_s * 15) * (1 - progress)
+        mask = (x_range >= 38) & (x_range <= 40 + reach)
+        display_y[mask] = y_sand[mask] + 0.05
         
-        # Bubbles popping on the sand
         foam_x = np.random.uniform(38, 40 + reach, 10)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.1 for val in foam_x]
+        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.05 for val in foam_x]
 
     # Final "Watertight" Geometry
     y_capped = np.maximum(y_sand, display_y)
@@ -237,8 +245,9 @@ for i in range(n_frames):
         data=[
             go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
             go.Scatter(x=x_poly, y=y_poly, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Ocean"),
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=np.random.randint(3, 8), opacity=0.7)),
-            go.Scatter(x=spray_x, y=spray_y, mode='lines', line=dict(color='white', width=4)) if len(spray_x) > 0 else go.Scatter(x=[None], y=[None])
+            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=np.random.randint(2, 6), opacity=0.6), showlegend=False),
+            go.Scatter(x=spray_x, y=spray_y, mode='lines+markers' if t < 0.65 else 'markers', 
+                       marker=dict(color='white', size=2), line=dict(color='white', width=3), showlegend=False)
         ],
         name=f'f{i}'
     ))
