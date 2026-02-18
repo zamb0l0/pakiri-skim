@@ -144,13 +144,13 @@ with g_col2:
     """)
 st.divider()
 
-# --- HIGH-FPS WAVE PHYSICS SIMULATION ---
-st.subheader("🌀 Dynamic Ledge Simulator (30fps Physics)")
+# --- REFINED OCEAN WAVE & SPILL SIMULATION ---
+st.subheader("🌀 Pakiri Ledge: Fluid Dynamics Sim")
 
-# 1. Physics Parameters
-n_frames = 60  # Higher frame count for smoothness
-x_beach = np.linspace(0, 60, 150)
-y_beach = x_beach * slope
+# 1. Physics & Timing
+n_frames = 60 
+x_beach = np.linspace(0, 60, 200) # Higher resolution for smoother fluid
+y_sand = x_beach * slope          
 current_tide = now_data['tide_level']
 impact_x = current_tide / slope
 h_s = now_data['swell_wave_height']
@@ -159,66 +159,61 @@ xi = now_data['xi']
 frames = []
 
 for i in range(n_frames):
-    t = i / n_frames # Time progress 0 -> 1
+    t = i / n_frames
     
-    # Wave Body Logic
-    # The crest moves toward the beach
-    crest_x = 5 + (t * (impact_x - 3))
+    # --- THE WAVE BODY ---
+    # Crest moves from left toward impact_x
+    crest_center = 5 + (t * (impact_x - 5))
+    # Wave shape (Asymmetric: steeper front, flatter back)
+    wave_shape = h_s * np.exp(-((x_beach - crest_center)**2) / (15 if x_beach[0] < crest_center else 5))
     
-    # Parametric Lip Logic: As t approaches 1 (the beach), the wave 'pitches'
-    is_breaking = t > 0.7
-    lip_offset_x = 0
-    lip_offset_y = 0
+    # --- THE PLUNGING LIP ---
+    lip_x, lip_y = [], []
+    if t > 0.6 and t < 0.9: # The 'Pitching' phase
+        pitch_t = (t - 0.6) / 0.3
+        # Parametric curl (The Spiral)
+        lip_x = [crest_center, crest_center + (pitch_t * xi * 2)]
+        lip_y = [current_tide + wave_shape.max(), current_tide + wave_shape.max() * (1 - pitch_t)]
     
-    if is_breaking:
-        # The 'Throw' of the lip depends on the xi (Iribarren)
-        pitch_intensity = (t - 0.7) * 3
-        lip_offset_x = pitch_intensity * xi * 1.5 
-        lip_offset_y = np.sin(pitch_intensity) * h_s
-    
-    # Define the Wave Surface
-    wave_y = np.full_like(x_beach, current_tide)
-    # Add the swell swell pulse
-    wave_y += h_s * np.exp(-((x_beach - crest_x)**2) / 12)
-    
-    # Define the Lip (The Curl)
-    # We create a secondary trace for the 'throwing' lip
-    lip_x = [crest_x, crest_x + lip_offset_x]
-    lip_y = [current_tide + h_s, current_tide + h_s - lip_offset_y]
-    
-    # Foam/Wash Logic (Spilling up the slope)
-    foam_x = [impact_x]
-    foam_y = [current_tide]
-    if t > 0.85:
-        wash_reach = (t - 0.85) * (h_s / slope) * 2
-        foam_x = [impact_x, impact_x + wash_reach]
-        foam_y = [current_tide + 0.05, current_tide + (wash_reach * slope) + 0.05]
+    # --- THE SPILL (Tea Cup Logic) ---
+    # Water must always be >= y_sand
+    # We calculate the "surge" height after the wave hits the bank
+    surge_y = np.zeros_like(x_beach)
+    if t > 0.8:
+        surge_t = (t - 0.8) / 0.2
+        reach_max = (h_s * 1.5) / slope # How far it pushes up
+        current_reach = surge_t * reach_max
+        
+        # Define the thin film of water moving up the slope
+        mask = (x_beach >= impact_x) & (x_beach <= impact_x + current_reach)
+        surge_y[mask] = 0.15 * (1 - (x_beach[mask] - impact_x)/reach_max) # Thinning as it climbs
+
+    # Final Water Surface: Max of (Tide + Wave + Surge) vs Sand
+    # This ensures water flows UP the sand, never THROUGH it
+    total_water = np.maximum(y_sand, current_tide + wave_shape + surge_y)
 
     frames.append(go.Frame(
         data=[
-            go.Scatter(x=x_beach, y=y_beach, fill='toself', line=dict(color='burlywood', width=3)), # Sand
-            go.Scatter(x=x_beach, y=wave_y, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=2)), # Wave Body
-            go.Scatter(x=lip_x, y=lip_y, mode='lines+markers', line=dict(color='white', width=6), marker=dict(size=8, color='white')), # The Lip
-            go.Scatter(x=foam_x, y=foam_y, mode='lines', fill='toself', line=dict(color='rgba(255, 255, 255, 0.9)', width=10)) # Foam Wash
+            go.Scatter(x=x_beach, y=y_sand, fill='toself', line=dict(color='burlywood', width=3), name="Sand"),
+            go.Scatter(x=x_beach, y=total_water, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=1), name="Water"),
+            go.Scatter(x=lip_x, y=lip_y, mode='lines', line=dict(color='white', width=5)) if lip_x else go.Scatter()
         ],
         name=f'f{i}'
     ))
 
-# Build Figure
 fig_sim = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], autorange=False, title="Distance (m)"),
+        xaxis=dict(range=[0, 60], autorange=False, title="Meters from Low Tide"),
         yaxis=dict(range=[0, 6], autorange=False, title="Elevation (m)"),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Run Simulation", method="animate", 
-                          args=[None, {"frame": {"duration": 33, "redraw": True}, "fromcurrent": True, "mode": "immediate"}])])],
+        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Play Wave", method="animate", 
+                          args=[None, {"frame": {"duration": 33, "redraw": True}, "mode": "immediate"}])])],
         plot_bgcolor='white'
     ),
     frames=frames
 )
 
 st.plotly_chart(fig_sim, use_container_width=True)
-st.caption(f"Currently simulating a {'Plunging Ledge' if xi > 1.2 else 'Spilling Wave'} based on ξ = {xi:.2f}")
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
