@@ -104,6 +104,12 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed):
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
+
+# Direction Arrow Helper
+def get_arrow(deg):
+    arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']
+    return arrows[int((deg + 22.5) / 45) % 8]
+
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily = df.groupby('date_label').agg({
     'xi': 'max', 'swell_wave_height': 'mean', 
@@ -116,15 +122,20 @@ for i, (date, row) in enumerate(daily.iterrows()):
     color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'])
     t_time = get_high_tide(row['time'])
     
+    # Arrows
+    s_arrow = get_arrow(row['swell_wave_direction'])
+    w_arrow = get_arrow(row['wind_dir'])
+    
     with cols[i//5][i%5]:
         st.markdown(f"""
             <div class='card {color}'>
-                {date}<br>
-                <span style='font-size:1.1em;'>{label}</span><br>
-                <small>{row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s</small><br>
-                <small>Wind: {row['wind_speed']:.0f}km/h {get_cardinal(row['wind_dir'])}</small><br>
-                <small>High Tide: {t_time}</small>
-                <hr style='margin:5px 0;'>ξ {row['xi']:.2f}
+                <div style='font-size: 0.9em; opacity: 0.9;'>{date}</div>
+                <div style='font-size: 1.3em; margin: 5px 0;'><strong>{label}</strong></div>
+                <div style='font-size: 1.1em; color: #fff;'>🌊 {row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s {s_arrow}</div>
+                <div style='font-size: 0.9em;'>💨 {row['wind_speed']:.0f}km/h {w_arrow}</div>
+                <div style='font-size: 0.9em; margin-top: 5px;'>⏳ High: <strong>{t_time}</strong></div>
+                <hr style='margin:8px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
+                <div style='font-size: 1.2em;'>ξ {row['xi']:.2f}</div>
             </div>
             """, unsafe_allow_html=True)
 
