@@ -22,7 +22,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🌊 Pakiri Skim Forecast - Beach Gradient Inclusive")
+st.title("Pakiri Skim Forecast - Beach Gradient Inclusive")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -152,7 +152,7 @@ with g_col2:
 st.divider()
 
 # --- PARAMETRIC "HOLLOW" WAVE ENGINE (FIXED & WATERTIGHT) ---
-st.subheader("🌀 Pakiri Ledge: Hollow Barrel & Recede")
+st.subheader("Pakiri Ledge: Hollow Barrel & Recede")
 
 # 1. The Organic Bank
 x_range = np.linspace(0, 60, 300)
@@ -273,7 +273,7 @@ st.plotly_chart(fig_ledge, use_container_width=True)
 # fig_barrel chart call removed to prevent NameError
 
 # --- 10-DAY GRID ---
-st.subheader("🗓️ 10-Day Skim Forecast")
+st.subheader("10-Day Skim Forecast")
 
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily = df.groupby('date_label').agg({
