@@ -138,73 +138,76 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- ENHANCED: REALISTIC BERM PROFILE COMPARISON ---
+# --- EXAGGERATED: BERM DYNAMICS & REFLECTION ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Visualizing the **Ledge Face**. Red/Yellow indicates the vertical strike zone. If the Cyan Tide line hits a Red zone, the bank is firing.")
+st.write("Visual scaling is **exaggerated** to show bank intensity. **R%** is the Reflection Coefficient (Backwash Power).")
 
-df['date_label'] = df['time'].dt.strftime('%a, %b %d')
-daily_geom = df.groupby('date_label').agg({
-    'xi':'max', 'tide_level':'max', 'dynamic_slope':'max'
-}).reindex(df['date_label'].unique())
-
-avg_slope = daily_geom['dynamic_slope'].mean()
-g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(10, 100, 80)
-
-def get_realistic_profile(slope_val):
-    mu = 75  # Position of the Ledge
-    # We make sigma extremely sensitive to slope to force visual change
-    sigma = 30 / (slope_val * 40) 
+def get_exaggerated_profile(slope_val, xi_val):
+    # POSITION: Move the ledge forward/back based on tide-adjusted slope
+    mu = 85 - (slope_val * 100) 
     
-    # 1. The Ledge Face (Gaussian)
-    y = 3.2 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    # SHAPE: High xi = Vertical Wall | Low xi = Flat Ramp
+    # We use xi to aggressively shrink the 'sigma' (width of the face)
+    sigma = 15 / (xi_val ** 2) 
     
-    # 2. The Berm Flattening: Keep the height high for x > mu (the beach plateau)
-    y = np.where(x_vals > mu, 3.2 - (0.005 * (x_vals - mu)), y)
+    # 1. The Ledge Face
+    y = 3.5 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
     
-    # 3. Local Steepness (Derivative) for coloring
+    # 2. The Berm Plateau (Real beach rise/flattening)
+    # Beyond the peak, the sand stays high or rises slightly (0.01 slope)
+    y = np.where(x_vals > mu, 3.5 + (0.01 * (x_vals - mu)), y)
+    
+    # 3. Steepness for coloring
     dy = np.abs(np.gradient(y))
-    return y, dy
+    
+    # 4. Reflection Coefficient (Simplified: R = xi^2 / (xi^2 + 10))
+    reflection = (xi_val**2) / (xi_val**2 + 5) * 100
+    
+    return y, dy, reflection
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     with g_cols[i//5][i%5]:
-        y_vals, dy = get_realistic_profile(row['dynamic_slope'])
-        y_avg, _ = get_realistic_profile(avg_slope)
+        # Generate data using the Max XI of the day for the visual
+        y_vals, dy, reflection = get_exaggerated_profile(row['dynamic_slope'], row['xi'])
+        y_avg, _, _ = get_exaggerated_profile(avg_slope, 1.0) # Baseline average
         
         fig_mini = go.Figure()
 
-        # Faint Average Reference (The 'Ghost' bank)
+        # Faint Average Reference
         fig_mini.add_trace(go.Scatter(
             x=x_vals, y=y_avg, 
-            line=dict(color='rgba(150, 150, 150, 0.15)', width=1, dash='dot'),
+            line=dict(color='rgba(200, 200, 200, 0.1)', width=1, dash='dot'),
             hoverinfo='none'
         ))
 
-        # The Daily Profile (High-contrast Bars)
+        # The Daily Profile - Gradient Bars
         fig_mini.add_trace(go.Bar(
             x=x_vals, y=y_vals,
             marker=dict(
                 color=dy, 
-                colorscale='Inferno', # Glows yellow at the steepest ledge
+                colorscale='YlOrRd', # Yellow to Deep Red for the 'Hot' zones
                 showscale=False,
-                line=dict(width=0) # Seamless look
+                line=dict(width=0)
             ),
-            width=1.2
+            width=1.5
         ))
 
-        # The Tide Line (Intersects the Face)
+        # The Tide Line
         fig_mini.add_trace(go.Scatter(
             x=[10, 100], y=[row['tide_level'], row['tide_level']], 
-            line=dict(color='cyan', width=3), 
+            line=dict(color='cyan', width=4), 
             name='Tide'
         ))
         
         fig_mini.update_layout(
-            height=200, margin=dict(l=0, r=0, t=40, b=0),
-            title={'text': f"<b>{date}</b><br><span style='color:orange'>ξ {row['xi']:.2f}</span>", 'font': {'size': 13}, 'x': 0.5},
+            height=220, margin=dict(l=0, r=0, t=50, b=0),
+            title={
+                'text': f"<b>{date}</b><br><span style='color:cyan; font-size:12px;'>R: {reflection:.0f}%</span>", 
+                'font': {'size': 14}, 'x': 0.5
+            },
             xaxis=dict(visible=False), 
-            yaxis=dict(range=[0, 4], visible=False),
+            yaxis=dict(range=[0, 4.5], visible=False),
             showlegend=False, barmode='overlay', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
         )
 
