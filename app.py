@@ -41,6 +41,55 @@ with st.sidebar:
 # --- DATA FETCHING ---
 @st.cache_data(ttl=3600)
 def get_full_data():
+# --- LIVE GAUGE SECTION ---
+# 1. Get current hour's data
+now = datetime.now()
+# Find the closest data point in our dataframe
+idx = (df['time'] - now).abs().idxmin()
+now_data = df.loc[idx]
+
+# 2. Get the current status label and color
+current_bg, current_label = get_expert_score(
+    now_data['xi'], now_data['swell_wave_height'], now_data['swell_wave_period'], 
+    now_data['swell_wave_direction'], now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level']
+)
+
+# 3. Create Gauge
+fig_gauge = go.Figure(go.Indicator(
+    mode = "gauge+number",
+    value = now_data['xi'],
+    title = {'text': f"Current Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 'font': {'size': 20}},
+    gauge = {
+        'axis': {'range': [0, 2.5], 'tickwidth': 1},
+        'bar': {'color': "black"},
+        'steps': [
+            {'range': [0, 0.8], 'color': '#ff4b4b'},    # Washed out
+            {'range': [0.8, 1.2], 'color': '#ffa500'},  # Mush
+            {'range': [1.2, 1.8], 'color': '#2ecc71'},  # Good
+            {'range': [1.8, 2.5], 'color': '#1b5e20'}], # Premium
+        'threshold': {
+            'line': {'color': "gold", 'width': 4},
+            'thickness': 0.75,
+            'value': 1.2} # Ledge Threshold
+    }
+))
+
+fig_gauge.update_layout(height=300, margin=dict(t=80, b=20, l=30, r=30))
+
+# 4. Display in two columns
+g_col1, g_col2 = st.columns([2, 1])
+with g_col1:
+    st.plotly_chart(fig_gauge, use_container_width=True)
+with g_col2:
+    st.markdown(f"""
+        ### Right Now at Pakiri
+        **Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}  
+        **Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}  
+        **Tide:** {now_data['tide_level']:.1f}m  
+        **Session:** {current_label}
+    """)
+st.divider()
+    
     url = "https://api.open-meteo.com/v1/forecast?latitude=-36.26&longitude=174.78&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
     m_url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
     
