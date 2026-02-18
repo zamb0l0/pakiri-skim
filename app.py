@@ -22,7 +22,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🌊 Pakiri Skim Forecaste - Beach Gradient Inclusive")
+st.title("🌊 Pakiri Skim Forecast - Beach Gradient Inclusive")
 
 # --- SIDEBAR ---
 with st.sidebar:
