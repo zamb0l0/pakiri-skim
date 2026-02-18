@@ -53,18 +53,20 @@ with st.sidebar:
     st.subheader("📖 What is ξ (Iribarren)?")
     st.write(r"**The Iribarren Number** ($\xi$) describes how waves break. High $\xi$ (>1.5) means the beach is steep enough for a **Premium Ledge**.")
 
-# --- REFINED WIND ENGINE ---
+# --- PAKIRI COORDINATES ---
+LAT = -36.264
+LON = 174.721
 
+# --- NEW WIND RULES ENGINE ---
 def get_wind_multiplier(deg, speed):
-    """Calculates a multiplier based on your specific Pakiri rules."""
-    # 1. Directional Logic: 135 to 315 is the 'Safe Zone'
+    """Calculates quality based on your rules: 135-315 deg, Sweet spot 225 deg."""
+    # 1. Directional Logic
     if not (135 <= deg <= 315):
-        dir_mult = 0.5  # Heavy penalty for anything Onshore (N to E)
+        dir_mult = 0.5  # Heavy penalty for Onshore (N to E)
     else:
-        # Sweet Spot Logic: The closer to 225, the better. 
-        # Being exactly at 225 gives a 20% boost (1.2).
+        # The closer to 225, the better (1.2 boost at perfect 225)
         offshore_error = abs(deg - 225)
-        dir_mult = 1.2 - (offshore_error / 450) # Very gradual decay from 225
+        dir_mult = 1.2 - (offshore_error / 450)
 
     # 2. Speed Logic
     if speed < 5:
@@ -72,46 +74,51 @@ def get_wind_multiplier(deg, speed):
     elif speed < 12:
         speed_mult = 1.0  # Average
     elif speed > 25:
-        speed_mult = 0.6  # Not too good / Blown out
+        speed_mult = 0.6  # Not too good
     else:
         speed_mult = 0.8  # Moderate
 
     return dir_mult * speed_mult
 
-def get_expert_score(xi, h, t, wind_deg, wind_speed, tide_h):
-    # Adjust xi by our wind multiplier
-    w_mult = get_wind_multiplier(wind_deg, wind_speed)
-    final_xi = xi * w_mult
-    
-    if wind_speed > 35: return "bg-purple", "⚠️ DANGER WIND"
-    
-    # Labeling based on wind-adjusted Iribarren
-    if final_xi > 1.6: return "bg-darkgreen", "PREMIUM"
-    if final_xi > 1.2: return "bg-lightgreen", "GOOD"
-    if final_xi > 0.8: return "bg-yellow", "AVERAGE"
-    return "bg-red", "WASHED OUT"
-
-# --- THE UPDATED DATA FETCHING FUNCTION ---
 @st.cache_data(ttl=3600)
 def get_full_data(current_slope):
+    # API URLs using the LAT/LON defined above
     w_url = f"https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LON}&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
     m_url = f"https://marine-api.open-meteo.com/v1/marine?latitude={LAT}&longitude={LON}&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
     
-    w_data = requests.get(w_url).json()['hourly']
-    m_data = requests.get(m_url).json()['hourly']
-    df = pd.DataFrame(m_data)
-    df['wind_speed'] = w_data['wind_speed_10m']
-    df['wind_dir'] = w_data['wind_direction_10m']
+    # Fetch Data
+    w_res = requests.get(w_url).json()
+    m_res = requests.get(m_url).json()
+    
+    # Build DataFrame
+    df = pd.DataFrame(m_res['hourly'])
+    df['wind_speed'] = w_res['hourly']['wind_speed_10m']
+    df['wind_dir'] = w_res['hourly']['wind_direction_10m']
     df['time'] = pd.to_datetime(df['time'])
     
-    # Tide Calculation
+    # 1. Tide Calculation (Fixes the NameError/Tide crash)
     ref = datetime(2026, 2, 18, 8, 15)
     df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
     df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
     
-    # Physics Logic
-    tide
+    # 2. Physics & Slope
+    tide_modifier = (df['tide_level'] - 1.2) / 2
+    df['dynamic_slope'] = current_slope * (1 + tide_modifier)
+    df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
+    
+    # 3. Base Iribarren (Raw Ledge Geometry)
+    df['xi_raw'] = df['dynamic_slope'] / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
+    
+    # 4. Apply Your New Wind Rules
+    df['wind_mult'] = df.apply(lambda x: get_wind_multiplier(x['wind_dir'], x['wind_speed']), axis=1)
+    df['xi'] = df['xi_raw'] * df['wind_mult'] # This is the final quality score
+    
+    # 5. Reflection Coefficient
+    df['R'] = (df['xi']**2) / (df['xi']**2 + 5) * 100
+    
+    return df
 
+# Execute the fixed function
 df = get_full_data(slope)
 
 # --- HELPERS ---
@@ -125,14 +132,27 @@ def get_arrow_with_name(deg):
     return f"{name} {arrows[int((deg + 22.5) / 45) % 8]}"
 
 def get_expert_score(xi, h, t, wind_deg, wind_speed, tide_h):
-    if wind_speed > 35: return "bg-purple", "⚠️ DANGER WIND"
-    wind_card = get_cardinal(wind_deg)
-    # Wind Penalty Labeling
-    if wind_card in ['NNE', 'NE', 'ENE', 'E'] and wind_speed > 12:
+    # DANGER ZONE
+    if wind_speed > 35: 
+        return "bg-purple", "⚠️ DANGER WIND"
+    
+    # GLASSY BONUS LABEL
+    # Since xi already has the bonus, we just check the speed to add the 'MINT' label
+    is_glassy = wind_speed < 5 and (135 <= wind_deg <= 315)
+    
+    # LABELING based on the wind-adjusted xi (the 'xi' passed here is df['xi'])
+    if xi > 1.6: 
+        label = "💎 MINT GLASS" if is_glassy else "PREMIUM"
+        return "bg-darkgreen", label
+    if xi > 1.2: 
+        return "bg-lightgreen", "GOOD"
+    if xi > 0.8: 
+        return "bg-yellow", "AVERAGE"
+    
+    # ONSHORE / BAD CONDITIONS
+    if not (135 <= wind_deg <= 315):
         return "bg-red", "🌪️ CHOPPY ONSHORE"
-    if xi > 1.5: return "bg-darkgreen", "PREMIUM"
-    if xi > 1.2: return "bg-lightgreen", "GOOD"
-    if xi > 0.8: return "bg-yellow", "AVERAGE"
+        
     return "bg-red", "WASHED OUT"
 
 # --- LIVE GAUGE ---
