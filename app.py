@@ -92,10 +92,17 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed, tide_h):
     elif tide_h < 0.8: score -= 5
     
     wind_card = get_cardinal(wind_deg)
+    
+    # --- INTEGRATED ONSHORE PENALTY ---
+    # NE, E, SE winds create chop that ruins the ledge face
+    if wind_card in ['NNE', 'NE', 'ENE', 'E', 'ESE', 'SE']:
+        score -= 12
+        if wind_speed > 15: return "bg-red", "🌪️ CHOPPY ONSHORE"
+
     if 0.3 <= h <= 0.6: score += 7
     if t >= 11: score += 5
     
-    if t >= 13 and xi > 1.2: return "bg-blue", "🏆 DEC 8th BERM"
+    if t >= 13 and xi > 1.2 and wind_card in ['W', 'SW', 'S']: return "bg-blue", "🏆 DEC 8th BERM"
     if swell_dir < 45 and wind_card in ['S', 'SSW', 'SW']: return "bg-blue", "🌪️ RIVERMOUTH WRAP"
     if wind_speed > 25: return "bg-orange", "TOO WINDY"
     
