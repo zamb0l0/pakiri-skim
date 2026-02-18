@@ -279,48 +279,27 @@ with st.expander("🔬 How the Pakiri Ledge Engine Works"):
     doc_col1, doc_col2 = st.columns([1, 1])
     
     with doc_col1:
-        st.markdown("""
+        # NOTICE THE 'r' BEFORE THE QUOTES BELOW
+        st.markdown(r"""
         **1. Raw Data Acquisition**
         The system pulls live, high-resolution data from global engines via the **Open-Meteo API**:
         * **Global Forecast System (GFS):** For wind speed and direction.
-        * **MeteoFrance Wave Model:** For swell height, period, and direction, derived from satellite altimetry and Pacific buoy networks.
+        * **MeteoFrance Wave Model:** For swell height, period, and direction.
 
         **2. The Pakiri Transformation**
         We process raw swell through three mathematical layers:
-        * **Wavelength ($L$):** Calculated using $L = \frac{g \cdot T^2}{2\pi}$. This determines the wave's energy density.
-        * **Dynamic Slope:** Unlike static models, this app adjusts the beach slope based on the **Tide Cycle**. As water reaches the berm, the slope $(\tan \beta)$ increases.
+        * **Wavelength ($L$):** Calculated using $L = \frac{g \cdot T^2}{2\pi}$.
+        * **Dynamic Slope:** Adjusts based on the **Tide Cycle**.
         """)
     
     with doc_col2:
-        st.markdown("""
+        # NOTICE THE 'r' BEFORE THE QUOTES BELOW
+        st.markdown(r"""
         **3. The Iribarren Engine ($\xi$)**
         This is the core "Ledge" metric. It calculates the transition between energy absorption and wave reflection:
-        $$\\xi = \\frac{\\tan \\beta}{\\sqrt{H/L}}$$
+        $$\xi = \frac{\tan \beta}{\sqrt{H/L}}$$
         
         **4. Reflection Coefficient ($R$)**
-        To predict backwash power, we calculate the percentage of wave energy reflected back off the sand:
-        $$R = \\frac{\\xi^2}{\\xi^2 + 5}$$
+        To predict backwash power:
+        $$R = \frac{\xi^2}{\xi^2 + 5}$$
         """)
-
-    st.divider()
-    
-    st.markdown("### 📊 Deciphering the Visuals")
-    
-    
-    tab1, tab2, tab3 = st.tabs(["Breaking Types", "Bank Health", "The Ledge Visual"])
-    
-    with tab1:
-        st.table(pd.DataFrame({
-            "Iribarren (ξ)": ["< 0.5", "0.5 - 1.2", "> 1.5"],
-            "Break Type": ["Spilling", "Plunging", "Surging"],
-            "Skim Quality": ["Washed Out (Flat)", "Average (Shorebreak)", "Premium (The Ledge)"]
-        }))
-        
-        
-    with tab2:
-        st.write("**Bank Volume Tracking** is determined by the *Swell Steepness Ratio*.")
-        st.write("If $H/L < 0.02$, long-period energy pushes sand shoreward (**Building**). If the ratio is higher, short-period energy pulls sand away (**Eroding**).")
-        
-        
-    with tab3:
-        st.write("The Daily Profile graphs use **Non-Linear Geometric Scaling**. On 'Good' days, the $x$-axis is compressed to visually represent a 'Ledge Wall'. On 'Bad' days, it is stretched to show a 'Dissipative Ramp'.")
