@@ -11,13 +11,14 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 # --- CUSTOM CSS ---
 st.markdown("""
     <style>
-    .card { padding: 15px; border-radius: 12px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; min-height: 220px; border: 1px solid rgba(255,255,255,0.1); }
+    .card { padding: 15px; border-radius: 12px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; min-height: 100px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; justify-content: center; }
     .bg-red { background-color: #ff4b4b; }
     .bg-orange { background-color: #ffa500; }
     .bg-yellow { background-color: #f1c40f; color: black !important; }
     .bg-lightgreen { background-color: #2ecc71; color: black !important; }
     .bg-darkgreen { background-color: #1b5e20; }
     .bg-blue { background-color: #2980b9; border: 2px solid gold; }
+    .session-time { font-size: 0.8em; opacity: 0.9; margin-top: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -26,7 +27,7 @@ st.title("Pakiri Skim Forecast - Beach Gradient Inclusive")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("🎛️ Calibration")
-    slope = st.slider("Base Beach Slope (tan beta)", 0.02, 0.15, 0.0371, format="%.4f")
+    slope = st.slider("Base Beach Slope (tan $\\beta$)", 0.02, 0.15, 0.0371, format="%.4f")
     st.info("Dynamic slope is currently syncing with the tide cycle.")
 
     st.header("📸 Session Log")
@@ -34,7 +35,7 @@ with st.sidebar:
     if uploaded_file: st.image(uploaded_file)
 
     st.divider()
-    st.subheader("📖 What is ξ (Iribarren)?")
+    st.subheader("📖 What is $\\xi$ (Iribarren)?")
     st.write(r"**The Iribarren Number** ($\xi$) describes how waves break. High $\xi$ (>1.2) means the beach is steep enough for a **Ledge**.")
 
 # --- DATA FETCHING ---
@@ -51,19 +52,15 @@ def get_full_data(current_slope):
     df['wind_dir'] = w_data['wind_direction_10m']
     df['time'] = pd.to_datetime(df['time'])
 
-    # Smooth Tide Approximation
     ref = datetime(2026, 2, 18, 8, 15)
     df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
     df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
 
-    # DYNAMIC SLOPE
     tide_modifier = (df['tide_level'] - 1.2) / 2
     df['dynamic_slope'] = current_slope * (1 + tide_modifier)
 
-    # Physics
     df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
     df['xi'] = df['dynamic_slope'] / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
-
     return df
 
 df = get_full_data(slope)
@@ -76,8 +73,7 @@ def get_cardinal(degrees):
 def get_arrow_with_name(deg):
     name = get_cardinal(deg)
     arrows = ['↓', '↙', '←', '↖', '↑', '↗', '→', '↘']
-    arrow = arrows[int((deg + 22.5) / 45) % 8]
-    return f"{name} {arrow}"
+    return f"{name} {arrows[int((deg + 22.5) / 45) % 8]}"
 
 def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed, tide_h):
     score = xi * 10
@@ -106,123 +102,98 @@ current_bg, current_label = get_expert_score(
     now_data['swell_wave_direction'], now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level']
 )
 
-fig_gauge = go.Figure(go.Indicator(
-    mode = "gauge+number",
-    value = now_data['xi'],
-    title = {'text': f"Current Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 'font': {'size': 20}},
-    gauge = {
-        'axis': {'range': [0, 2.5], 'tickwidth': 1},
-        'bar': {'color': "black"},
-        'steps': [
-            {'range': [0, 0.8], 'color': '#ff4b4b'},
-            {'range': [0.8, 1.2], 'color': '#ffa500'},
-            {'range': [1.2, 1.8], 'color': '#2ecc71'},
-            {'range': [1.8, 2.5], 'color': '#1b5e20'}],
-        'threshold': {'line': {'color': "gold", 'width': 4}, 'thickness': 0.75, 'value': 1.2}
-    }
-))
-fig_gauge.update_layout(height=300, margin=dict(t=80, b=20, l=30, r=30))
-
 g_col1, g_col2 = st.columns([2, 1])
 with g_col1:
+    fig_gauge = go.Figure(go.Indicator(
+        mode = "gauge+number", value = now_data['xi'],
+        title = {'text': f"Current Ledge Quality ($\\xi$)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>"},
+        gauge = {'axis': {'range': [0, 2.5]}, 'bar': {'color': "black"},
+                 'steps': [{'range': [0, 0.8], 'color': '#ff4b4b'}, {'range': [0.8, 1.2], 'color': '#ffa500'},
+                           {'range': [1.2, 1.8], 'color': '#2ecc71'}, {'range': [1.8, 2.5], 'color': '#1b5e20'}]}
+    ))
     st.plotly_chart(fig_gauge, use_container_width=True)
+
 with g_col2:
-    st.markdown(f"""
-        ### Right Now at Pakiri
-        **Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}  
-        **Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}  
-        **Tide:** {now_data['tide_level']:.1f}m  
-        **Session:** {current_label}
-    """)
+    st.markdown(f"### Right Now at Pakiri\n**Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}\n**Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}\n**Tide:** {now_data['tide_level']:.1f}m")
+
+# --- NEW: UPCOMING FORECAST TILES ---
+st.subheader("🗓️ Upcoming Ledge Windows (Next 5 High Tides)")
+# Finding local peaks in tide for the forecast block
+peaks = df[(df['tide_level'] > df['tide_level'].shift(1)) & (df['tide_level'] > df['tide_level'].shift(-1))]
+peaks = peaks[peaks['time'] > now].head(5)
+
+f_cols = st.columns(5)
+for i, (_, row) in enumerate(peaks.iterrows()):
+    bg, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'], row['tide_level'])
+    with f_cols[i]:
+        st.markdown(f"""
+            <div class="card {bg}">
+                {row['time'].strftime('%a %d %b')}
+                <div class="session-time">{row['time'].strftime('%I:%M %p')}</div>
+                <div style="font-size:1.1em; margin-top:5px;">{label}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
 st.divider()
 
-# --- THE PARAMETRIC LEDGE ENGINE ---
+# --- PARAMETRIC LEDGE ENGINE ---
 n_frames = 120 
 x_base = np.linspace(0, 60, 200)
-
-# Static Sand Path
 y_sand = 4 / (1 + np.exp(-0.25 * (x_base - 42)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
 
-h_s = now_data['swell_wave_height']
-xi = now_data['xi'] 
-tide = now_data['tide_level']
+h_s, xi_val, tide_val = now_data['swell_wave_height'], now_data['xi'], now_data['tide_level']
 
 frames = []
 for i in range(n_frames):
     t = i / n_frames
     path_x, path_y = [], []
-
-    # STAGE 1: ROUND LUMP (0.0 - 0.4)
-    if t < 0.4:
+    if t < 0.4: # Round Lump
         p = t / 0.4
         crest_x = p * 40
         amp = h_s * (1 + p * 0.5)
-        width = 8 - (p * 4) 
         path_x = list(x_base)
-        path_y = [max(y_sand[j], tide + amp * np.exp(-((x - crest_x)**2) / (2 * width**2))) for j, x in enumerate(x_base)]
-
-    # STAGE 2: THE PITCHING BARREL (0.4 - 0.75)
-    elif t < 0.75:
+        path_y = [max(y_sand[j], tide_val + amp * np.exp(-((x - crest_x)**2) / (2 * (8-p*4)**2))) for j, x in enumerate(x_base)]
+    elif t < 0.75: # Pitching Barrel
         p = (t - 0.4) / 0.35
         crest_x = 40 + (p * 5)
         amp = h_s * 1.6
-        # Back side
         back_x = np.linspace(0, crest_x, 80)
-        back_y = [max(np.interp(x, x_base, y_sand), tide + amp * np.exp(-((x - crest_x)**2) / (2 * 6**2))) for x in back_x]
-        # The Lip/C-Curve
-        throw = p * (xi * 6)
-        drop = 8 * (p**1.8)
+        back_y = [max(np.interp(x, x_base, y_sand), tide_val + amp * np.exp(-((x - crest_x)**2) / (2 * 6**2))) for x in back_x]
         phi = np.linspace(0, np.pi * 1.1, 40)
         r = (h_s * 0.7)
-        lip_x = crest_x + throw + r * np.sin(phi)
-        lip_y = (tide + amp) - drop + r * np.cos(phi)
-        # Shore connection
+        lip_x = crest_x + (p * xi_val * 6) + r * np.sin(phi)
+        lip_y = (tide_val + amp) - (8 * p**1.8) + r * np.cos(phi)
         shore_x = np.linspace(max(lip_x), 60, 80)
         shore_y = [np.interp(x, x_base, y_sand) for x in shore_x]
-        path_x = list(back_x) + list(lip_x) + list(shore_x)
-        path_y = list(back_y) + list(lip_y) + list(shore_y)
-
-    # STAGE 3: SWASH/REFLECTION (0.75 - 1.0)
-    else:
+        path_x, path_y = list(back_x) + list(lip_x) + list(shore_x), list(back_y) + list(lip_y) + list(shore_y)
+    else: # Swash
         p = (t - 0.75) / 0.25
-        impact_x = 42
         reach = (h_s * 15) * np.sin(p * np.pi)
         path_x = list(x_base)
         for j, x in enumerate(x_base):
-            if x < impact_x: path_y.append(max(y_sand[j], tide + (h_s * 0.1 * (1-p))))
-            elif impact_x <= x <= impact_x + reach: path_y.append(y_sand[j] + (0.3 * (1-p)))
+            if x < 42: path_y.append(max(y_sand[j], tide_val + (h_s * 0.1 * (1-p))))
+            elif 42 <= x <= 42 + reach: path_y.append(y_sand[j] + (0.3 * (1-p)))
             else: path_y.append(y_sand[j])
 
-    frames.append(go.Frame(
-        data=[
-            go.Scatter(x=list(x_base) + [60, 0], y=list(y_sand) + [0, 0], fill='toself', fillcolor='#C2B280', line=dict(color='#A68D60', width=1)),
-            go.Scatter(x=path_x + [60, 0], y=path_y + [0, 0], fill='toself', fillcolor='rgba(0, 105, 148, 0.7)', line=dict(color='#006994', width=2))
-        ], name=f'f{i}'
-    ))
+    frames.append(go.Frame(data=[
+        go.Scatter(x=list(x_base)+[60,0], y=list(y_sand)+[0,0], fill='toself', fillcolor='#C2B280', line=dict(color='#A68D60')),
+        go.Scatter(x=path_x+[60,0], y=path_y+[0,0], fill='toself', fillcolor='rgba(0,105,148,0.7)', line=dict(color='#006994'))
+    ], name=f'f{i}'))
 
-fig_ledge = go.Figure(
-    data=frames[0].data,
-    layout=go.Layout(
-        xaxis=dict(range=[0, 60], fixedrange=True, showgrid=False),
-        yaxis=dict(range=[0, 9], fixedrange=True, showgrid=False),
-        updatemenus=[{"type": "buttons", "buttons": [{"label": "🌊 Play Ledge Cycle", "method": "animate", "args": [None, {"frame": {"duration": 50, "redraw": False}, "fromcurrent": True}]}]}],
-        plot_bgcolor='white', height=450, margin=dict(l=0, r=0, t=0, b=0)
-    ), frames=frames
-)
+fig_ledge = go.Figure(data=frames[0].data, layout=go.Layout(
+    xaxis=dict(range=[0, 60], fixedrange=True, showgrid=False),
+    yaxis=dict(range=[0, 9], fixedrange=True, showgrid=False),
+    updatemenus=[{"type": "buttons", "buttons": [{"label": "🌊 Play Ledge Cycle", "method": "animate", "args": [None, {"frame": {"duration": 50, "redraw": False}}]}]}],
+    plot_bgcolor='white', height=450, margin=dict(l=0, r=0, t=0, b=0)
+), frames=frames)
 st.plotly_chart(fig_ledge, use_container_width=True)
 
-# --- 10-DAY DETAIL ---
+# --- 10-DAY CHART ---
 st.divider()
 st.subheader("📈 10-Day Detail: Quality vs Tide")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1.5, shape='spline'), yaxis="y2"))
-fig.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=5, shape='spline')))
-fig.update_layout(
-    hovermode="x unified", height=500, width=1800,
-    yaxis=dict(title="Quality (ξ)", range=[0, 2.5]),
-    yaxis2=dict(title="Tide", overlaying="y", side="right", range=[0, 5], showgrid=False),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-)
-fig.add_hline(y=1.2, line_dash="dash", line_color="rgba(0,0,0,0.3)", annotation_text="Ledge Threshold")
-st.components.v1.html(f'<div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">{fig.to_html(include_plotlyjs="cdn", full_html=False)}</div>', height=550)
+fig_scroll = go.Figure()
+fig_scroll.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1.5), yaxis="y2"))
+fig_scroll.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=5)))
+fig_scroll.update_layout(height=500, width=1800, yaxis=dict(title="Quality ($\\xi$)", range=[0, 2.5]), yaxis2=dict(overlaying="y", side="right", range=[0, 5]))
+st.components.v1.html(f'<div style="overflow-x: auto; border-radius: 10px;">{fig_scroll.to_html(include_plotlyjs="cdn", full_html=False)}</div>', height=550)
