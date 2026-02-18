@@ -52,22 +52,18 @@ def get_full_data(current_slope):
     df['wind_dir'] = w_data['wind_direction_10m']
     df['time'] = pd.to_datetime(df['time'])
     
-    # Smooth Tide Approximation
     ref = datetime(2026, 2, 18, 8, 15)
     df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
     df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
     
-    # DYNAMIC SLOPE: Beach is steeper at high tide
     tide_modifier = (df['tide_level'] - 1.2) / 2
     df['dynamic_slope'] = current_slope * (1 + tide_modifier)
     
-    # Physics
     df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
     df['xi'] = df['dynamic_slope'] / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
     
     return df
 
-# Helper to define data first
 df = get_full_data(slope)
 
 # --- HELPERS ---
@@ -92,10 +88,17 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed, tide_h):
     elif tide_h < 0.8: score -= 5
     
     wind_card = get_cardinal(wind_deg)
+    
+    # --- ONSHORE PENALTY ---
+    # NE, E, SE are death for Pakiri ledge
+    if wind_card in ['NE', 'ENE', 'E', 'ESE', 'SE', 'NNE']:
+        score -= 10
+        if wind_speed > 15: return "bg-red", "🌪️ CHOPPY ONSHORE"
+
     if 0.3 <= h <= 0.6: score += 7
     if t >= 11: score += 5
     
-    if t >= 13 and xi > 1.2: return "bg-blue", "🏆 DEC 8th BERM"
+    if t >= 13 and xi > 1.2 and wind_card in ['W', 'SW', 'S']: return "bg-blue", "🏆 DEC 8th BERM"
     if swell_dir < 45 and wind_card in ['S', 'SSW', 'SW']: return "bg-blue", "🌪️ RIVERMOUTH WRAP"
     if wind_speed > 25: return "bg-orange", "TOO WINDY"
     
@@ -144,19 +147,19 @@ with g_col2:
     """)
 st.divider()
 
-# --- PARAMETRIC "HOLLOW" WAVE ENGINE (FIXED & WATERTIGHT) ---
+# --- PARAMETRIC "HOLLOW" WAVE ENGINE (WATERTIGHT) ---
 st.subheader("🌀 Pakiri Ledge: Hollow Barrel & Recede")
 
-# 1. The Organic Bank
 x_range = np.linspace(0, 60, 300)
 y_sand = 4 / (1 + np.exp(-0.2 * (x_range - 38)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
-# Add seafloor corners for a solid fill
 x_poly = np.concatenate([[0], x_range, [60, 0]])
 
 current_tide = now_data['tide_level']
 h_s = now_data['swell_wave_height']
 xi = now_data['xi']
+wind_val = now_data['wind_speed']
+wind_dir_card = get_cardinal(now_data['wind_dir'])
 
 n_frames = 100
 frames = []
@@ -165,6 +168,7 @@ for i in range(n_frames):
     t = i / n_frames
     display_y = np.full_like(x_range, current_tide)
     foam_x, foam_y = [], []
+    spray_x, spray_y = [], []
 
     if t < 0.6: # THE BARREL
         progress = t / 0.6
@@ -178,6 +182,11 @@ for i in range(n_frames):
         
         wave_influence = np.interp(x_range, arc_x, arc_y, left=current_tide, right=current_tide)
         display_y = np.maximum(display_y, wave_influence)
+
+        # Add Offshore Spray effect
+        if wind_val > 15 and wind_dir_card in ['W', 'SW', 'S', 'WSW']:
+            spray_x = [crest_x - 2, crest_x - 5]
+            spray_y = [current_tide + shoal_h*2, current_tide + shoal_h*2.2]
         
     elif t < 0.8: # THE IMPACT
         progress = (t - 0.6) / 0.2
@@ -194,7 +203,6 @@ for i in range(n_frames):
         mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
         display_y[mask] = y_sand[mask] + 0.1
 
-    # Apply Tea Cup Logic & Close Polygon for solid fill
     y_capped = np.maximum(y_sand, display_y)
     y_poly = np.concatenate([[0], y_capped, [0, 0]])
 
@@ -202,7 +210,8 @@ for i in range(n_frames):
         data=[
             go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
             go.Scatter(x=x_poly, y=y_poly, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=0), name="Ocean"),
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=12))
+            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=12)),
+            go.Scatter(x=spray_x, y=spray_y, mode='lines', line=dict(color='rgba(255,255,255,0.4)', width=2)) if spray_x else go.Scatter()
         ],
         name=f'f{i}'
     ))
@@ -220,7 +229,6 @@ fig_ledge = go.Figure(
 )
 
 st.plotly_chart(fig_ledge, use_container_width=True)
-# fig_barrel chart call removed to prevent NameError
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
