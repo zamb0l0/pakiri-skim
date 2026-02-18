@@ -178,28 +178,60 @@ function draw() {{
 """
 components.html(canvas_html, height=420)
 
-# --- 10-DAY GRID ---
+# --- 10-DAY GRID (Restored with Full Metrics) ---
 st.subheader("🗓️ 10-Day Skim Forecast")
+
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
+# Aggregate daily data to find the best conditions per day
 daily = df.groupby('date_label').agg({
-    'xi': 'max', 'swell_wave_height': 'mean', 'swell_wave_period': 'max', 
-    'swell_wave_direction': 'mean', 'wind_dir': 'mean', 'wind_speed': 'max', 
-    'time': 'first', 'tide_level': 'max'
+    'xi': 'max', 
+    'swell_wave_height': 'max', 
+    'swell_wave_period': 'max', 
+    'swell_wave_direction': 'first', # Direction at peak quality
+    'wind_dir': 'first', 
+    'wind_speed': 'max', 
+    'time': 'first', 
+    'tide_level': 'max'
 }).reindex(df['date_label'].unique())
 
 cols = [st.columns(5), st.columns(5)]
 for i, (date, row) in enumerate(daily.iterrows()):
-    color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'], row['tide_level'])
+    color, label = get_expert_score(
+        row['xi'], row['swell_wave_height'], row['swell_wave_period'], 
+        row['swell_wave_direction'], row['wind_dir'], row['wind_speed'], row['tide_level']
+    )
+    
+    # Calculate best window based on tide
     tide_dt = get_high_tide_dt(row['time'])
+    session_start = (tide_dt - timedelta(hours=1)).strftime('%I:%M')
+    session_end = (tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')
+
     with cols[i//5][i%5]:
-        st.markdown(f"""<div class='card {color}'>
-            <div style='font-size: 0.85em;'>{date}</div>
-            <div style='margin: 5px 0;'><strong>{label}</strong></div>
-            <div>🌊 {row['swell_wave_height']:.1f}m @ {row['swell_wave_period']:.0f}s</div>
-            <div class='session-time'>🎯 Best: {(tide_dt - timedelta(hours=1)).strftime('%I:%M')} - {(tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')}</div>
-            <hr style='margin:10px 0; opacity:0.2;'>
-            <div>ξ {row['xi']:.2f}</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class='card {color}'>
+                <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
+                <div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
+                
+                <div style='font-size: 1.0em; margin-top: 5px;'>
+                    🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s
+                </div>
+                
+                <div style='font-size: 0.85em; margin-top: 3px;'>
+                    Swell: {get_arrow_with_name(row['swell_wave_direction'])}
+                </div>
+                
+                <div style='font-size: 0.85em; color: #eee;'>
+                    Wind: {row['wind_speed']:.0f}km/h {get_arrow_with_name(row['wind_dir'])}
+                </div>
+
+                <div class='session-time' style='margin-top: 10px;'>
+                    🎯 Best: {session_start} - {session_end}
+                </div>
+                
+                <hr style='margin:10px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
+                <div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # --- SCROLLABLE CHART ---
 st.divider()
