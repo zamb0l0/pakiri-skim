@@ -168,43 +168,43 @@ for i in range(n_frames):
     t = i / n_frames
     display_y = np.full_like(x_range, current_tide)
     foam_x, foam_y = [], []
-    spray_x, spray_y = [], []
 
-    if t < 0.6: # THE BARREL
+    if t < 0.6: # STAGES B through G (Shoaling to Barrel)
         progress = t / 0.6
-        crest_x = progress * 40
-        phi = np.linspace(0, np.pi, 50)
-        shoal_h = h_s * (1 + (crest_x/40))
-        lip_throw = (progress**2) * xi * 2.5
+        # The wave crest moves toward the shore
+        crest_x = progress * 40 
         
-        arc_x = crest_x + np.sin(phi) * shoal_h + (phi * lip_throw)
+        # Parametric 'C' shape for the plunging lip
+        # phi 0 is the trough, pi is the curling lip
+        phi = np.linspace(0, np.pi * 1.2, 60) 
+        shoal_h = h_s * (1 + (crest_x / 40)) # Wave height increases as it nears shore
+        
+        # This creates the forward 'pitch' seen in Stage G
+        lip_throw = (progress**2) * xi * 3.5 
+        
+        # Parametric coordinates for the wave face
+        arc_x = crest_x + np.sin(phi) * shoal_h + (phi * lip_throw * 0.5)
         arc_y = current_tide + (1 - np.cos(phi)) * shoal_h
         
+        # Map the parametric arc back to our x_range for the fill
         wave_influence = np.interp(x_range, arc_x, arc_y, left=current_tide, right=current_tide)
         display_y = np.maximum(display_y, wave_influence)
-
-        # Add Offshore Spray effect
-        if wind_val > 15 and wind_dir_card in ['W', 'SW', 'S', 'WSW']:
-            spray_x = [crest_x - 2, crest_x - 5]
-            spray_y = [current_tide + shoal_h*2, current_tide + shoal_h*2.2]
         
-    elif t < 0.8: # THE IMPACT
+    elif t < 0.8: # STAGE H (Impact and Swash)
         progress = (t - 0.6) / 0.2
         impact_x = 40
         reach = (h_s * 15 * progress)
         mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
         display_y[mask] = y_sand[mask] + 0.15
+        # Whitecap marker at the leading edge of the swash
         foam_x, foam_y = [impact_x + reach], [y_sand[np.abs(x_range - (impact_x + reach)).argmin()] + 0.1]
 
-    else: # THE RECEDE
+    else: # THE RECEDE (Backwash)
         progress = (t - 0.8) / 0.2
         impact_x = 40
         reach = (h_s * 15) * (1 - progress)
         mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
         display_y[mask] = y_sand[mask] + 0.1
-
-    y_capped = np.maximum(y_sand, display_y)
-    y_poly = np.concatenate([[0], y_capped, [0, 0]])
 
     frames.append(go.Frame(
         data=[
