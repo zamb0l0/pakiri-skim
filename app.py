@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 # --- CONFIG & STYLING ---
 st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", layout="wide")
 
+# CSS for the polished cards
 st.markdown("""
     <style>
-    .card { padding: 15px; border-radius: 12px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; min-height: 270px; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
+    .card { padding: 15px; border-radius: 12px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; min-height: 280px; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
     .card:hover { transform: scale(1.02); }
     .bg-red { background-color: #ff4b4b; }
     .bg-orange { background-color: #ffa500; }
@@ -24,7 +25,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Pakiri Skim Forecast - Beach Gradient Inclusive")
+st.title("Pakiri Ledge Command Center")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -43,9 +44,9 @@ with st.sidebar:
 # --- DATA FETCHING ---
 @st.cache_data(ttl=3600)
 def get_full_data(current_slope):
-    url = "https://api.open-meteo.com/v1/forecast?latitude=-36.26&longitude=174.78&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
+    w_url = "https://api.open-meteo.com/v1/forecast?latitude=-36.26&longitude=174.78&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
     m_url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
-    w_data = requests.get(url).json()['hourly']
+    w_data = requests.get(w_url).json()['hourly']
     m_data = requests.get(m_url).json()['hourly']
     df = pd.DataFrame(m_data)
     df['wind_speed'] = w_data['wind_speed_10m']
@@ -82,30 +83,20 @@ def get_expert_score(xi, h, t, wind_deg, wind_speed, tide_h):
     score = xi * 10
     if tide_h > 1.6: score += 5
     elif tide_h < 0.8: score -= 5
-    
     wind_card = get_cardinal(wind_deg)
-    if wind_card in ['NNE', 'NE', 'ENE', 'E', 'ESE', 'SE']:
-        score -= 12
-        if wind_speed > 15: return "bg-red", "🌪️ CHOPPY ONSHORE"
-    
-    if 0.3 <= h <= 0.6: score += 7
-    if t >= 11: score += 5
+    if wind_card in ['NNE', 'NE', 'ENE', 'E', 'ESE', 'SE'] and wind_speed > 15:
+        return "bg-red", "🌪️ CHOPPY ONSHORE"
     if t >= 13 and xi > 1.4 and wind_card in ['W', 'SW', 'S']: return "bg-blue", "🏆 DEC 8th BERM"
-    if wind_speed > 25: return "bg-orange", "TOO WINDY"
-    
     if xi > 1.5 and score > 20: return "bg-darkgreen", "PREMIUM"
     if xi > 1.2: return "bg-lightgreen", "GOOD"
     if xi > 0.8: return "bg-yellow", "AVERAGE"
     return "bg-red", "WASHED OUT"
 
-# --- LIVE GAUGE SECTION ---
+# --- LIVE GAUGE ---
 now = datetime.now()
 idx = (df['time'] - now).abs().idxmin()
 now_data = df.loc[idx]
-current_bg, current_label = get_expert_score(
-    now_data['xi'], now_data['swell_wave_height'], now_data['swell_wave_period'], 
-    now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level']
-)
+current_bg, current_label = get_expert_score(now_data['xi'], now_data['swell_wave_height'], now_data['swell_wave_period'], now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level'])
 
 g_col1, g_col2 = st.columns([2, 1])
 with g_col1:
@@ -120,122 +111,64 @@ with g_col1:
     st.plotly_chart(fig_gauge, use_container_width=True)
 
 with g_col2:
-    st.markdown(f"### Right Now at Pakiri\n**Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}\n**Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}\n**Tide:** {now_data['tide_level']:.1f}m\n**Session:** {current_label}")
+    st.markdown(f"### Right Now at Pakiri\n**Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}\n**Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}\n**Tide:** {now_data['tide_level']:.1f}m\n**Status:** {current_label}")
 
+# --- P5.JS CANVAS ---
 st.divider()
-
-# --- P5.JS FLUID CANVAS ---
 st.subheader("🌊 Real-Time Fluid Dynamics (Pakiri Ledge)")
 canvas_html = f"""
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
-<div id="canvas-container" style="width: 100%; text-align: center; background: white; border-radius: 15px; border: 1px solid #eee;"></div>
+<div id="p5-container" style="width:100%; text-align:center; background:white; border-radius:12px; border:1px solid #ddd;"></div>
 <script>
-let hs = {float(now_data['swell_wave_height'])};
-let xi = {float(now_data['xi'])};
-let tide = {float(now_data['tide_level'])};
-let slope = {float(slope)};
-
-function setup() {{
-  var canvas = createCanvas(windowWidth * 0.95, 350);
-  canvas.parent('canvas-container');
+let hs={float(now_data['swell_wave_height'])}; let xi={float(now_data['xi'])}; let tide={float(now_data['tide_level'])}; let slope={float(slope)};
+function setup(){{var c=createCanvas(windowWidth*0.9, 340); c.parent('p5-container');}}
+function draw(){{
+  background(255); let time=frameCount*0.02;
+  fill(194,178,128); noStroke(); beginShape(); vertex(0,height);
+  for(let x=0; x<=width; x+=10){{let sandY=height-(20+(1/(1+exp(-0.02*(x-width*0.7))))*(slope*2500)); vertex(x,sandY);}}
+  vertex(width,height); endShape(CLOSE);
+  fill(0,105,148,180); stroke(255); beginShape(); vertex(0,height);
+  for(let x=0; x<=width; x+=5){{
+    let prog=x/width; let cycle=(time-prog*4)%TWO_PI; let amp=(hs*40)*(1+(max(0,x-width*0.4)*0.003));
+    let xOff=(sin(cycle)>0.4 && xi>1.1)?pow(sin(cycle),3)*(xi*20):0;
+    let y=(height-120)-(tide*20)+sin(cycle)*amp;
+    let sandL=height-(20+(1/(1+exp(-0.02*(x-width*0.7))))*(slope*2500));
+    vertex(x+xOff, min(y, sandL));
+  }} vertex(width,height); endShape(CLOSE);
 }}
-
-function draw() {{
-  background(255);
-  let time = frameCount * 0.02;
-  fill(194, 178, 128); noStroke();
-  beginShape();
-  vertex(0, height);
-  for (let x = 0; x <= width; x += 10) {{
-    let sandY = height - (20 + (1 / (1 + exp(-0.02 * (x - width*0.7)))) * (slope * 2500));
-    vertex(x, sandY);
-  }}
-  vertex(width, height);
-  endShape(CLOSE);
-
-  push();
-  fill(0, 105, 148, 180); stroke(255); strokeWeight(1);
-  beginShape();
-  vertex(0, height);
-  for (let x = 0; x <= width; x += 5) {{
-    let progress = (x / width);
-    let cycle = (time - progress * 4) % TWO_PI;
-    let localAmp = (hs * 40) * (1 + (max(0, x - width * 0.4) * 0.003));
-    let xOffset = (sin(cycle) > 0.4 && xi > 1.1) ? pow(sin(cycle), 3) * (xi * 20) : 0;
-    let y = (height - 120) - (tide * 20) + sin(cycle) * localAmp;
-    let sandY = height - (20 + (1 / (1 + exp(-0.02 * (x - width*0.7)))) * (slope * 2500));
-    vertex(x + xOffset, min(y, sandY));
-  }}
-  vertex(width, height);
-  endShape(CLOSE);
-  pop();
-}}
-</script>
-"""
-components.html(canvas_html, height=370)
+</script>"""
+components.html(canvas_html, height=360)
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
-
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
-# Use 'first' for directions and 'max' for period/speed to avoid averaging out angles
-daily = df.groupby('date_label').agg({
-    'xi': 'max', 
-    'swell_wave_height': 'max', 
-    'swell_wave_period': 'max', 
-    'swell_wave_direction': 'first',
-    'wind_dir': 'first', 
-    'wind_speed': 'max', 
-    'time': 'first', 
-    'tide_level': 'max'
-}).reindex(df['date_label'].unique())
+daily = df.groupby('date_label').agg({'xi':'max','swell_wave_height':'max','swell_wave_period':'max','swell_wave_direction':'first','wind_dir':'first','wind_speed':'max','time':'first','tide_level':'max'}).reindex(df['date_label'].unique())
 
 cols = [st.columns(5), st.columns(5)]
 for i, (date, row) in enumerate(daily.iterrows()):
-    # Fix: Parameters must match get_expert_score(xi, h, t, wind_deg, wind_speed, tide_h)
-    color, label = get_expert_score(
-        row['xi'], 
-        row['swell_wave_height'], 
-        row['swell_wave_period'], 
-        row['wind_dir'], 
-        row['wind_speed'], 
-        row['tide_level']
-    )
-    
-    tide_dt = get_high_tide_dt(row['time'])
-    session_start = (tide_dt - timedelta(hours=1)).strftime('%I:%M')
-    session_end = (tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')
+    color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['wind_dir'], row['wind_speed'], row['tide_level'])
+    t_dt = get_high_tide_dt(row['time'])
+    s_start = (t_dt - timedelta(hours=1)).strftime('%I:%M')
+    s_end = (t_dt + timedelta(minutes=90)).strftime('%I:%M %p')
 
+    # Card injection - Zero leading indentation inside the triple quotes to prevent "code-dump"
+    card_html = f"""
+<div class='card {color}'>
+<div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
+<div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
+<div style='font-size: 1.0em; margin-top: 5px;'>🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s</div>
+<div style='font-size: 0.85em; margin-top: 3px;'>Swell: {get_arrow_with_name(row['swell_wave_direction'])}</div>
+<div style='font-size: 0.85em; color: #eee;'>Wind: {row['wind_speed']:.0f}km/h {get_arrow_with_name(row['wind_dir'])}</div>
+<div class='session-time' style='margin-top: 10px;'>🎯 Best: {s_start} - {s_end}</div>
+<hr style='margin:10px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
+<div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
+</div>"""
     with cols[i//5][i%5]:
-        st.markdown(f"""
-            <div class='card {color}'>
-                <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
-                <div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
-                
-                <div style='font-size: 1.0em; margin-top: 5px;'>
-                    🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s
-                </div>
+        st.markdown(card_html, unsafe_allow_html=True)
 
-                <div style='font-size: 0.85em; margin-top: 3px;'>
-                    Swell: {get_arrow_with_name(row['swell_wave_direction'])}
-                </div>
-
-                <div style='font-size: 0.85em; color: #eee;'>
-                    Wind: {row['wind_speed']:.0f}km/h {get_arrow_with_name(row['wind_dir'])}
-                </div>
-
-                <div class='session-time' style='margin-top: 10px;'>
-                    🎯 Best: {session_start} - {session_end}
-                </div>
-                
-                <hr style='margin:10px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
-                <div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-# --- CHART ---
+# --- TREND CHART ---
 st.divider()
-st.subheader("📈 Quality vs Tide")
+st.subheader("📈 Quality vs Tide Trend")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1), yaxis="y2"))
 fig.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=4)))
