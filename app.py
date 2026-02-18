@@ -138,64 +138,71 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- DAILY GEOMETRY (FIXED WITH go.Bar) ---
+# --- ENHANCED: REALISTIC BERM PROFILE COMPARISON ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Curve color indicates local **Steepness** (Hotter = Ledge). Faint line = 10-day average.")
+st.write("Visualizing the **Ledge Face**. Red/Yellow indicates the vertical strike zone. If the Cyan Tide line hits a Red zone, the bank is firing.")
 
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily_geom = df.groupby('date_label').agg({
-    'xi':'max', 'tide_level':'max', 'swell_wave_height':'max', 'dynamic_slope':'max', 'time':'first'
+    'xi':'max', 'tide_level':'max', 'dynamic_slope':'max'
 }).reindex(df['date_label'].unique())
 
 avg_slope = daily_geom['dynamic_slope'].mean()
 g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(20, 100, 80) # Using 80 points to create smooth bar profile
+x_vals = np.linspace(10, 100, 80)
 
-def get_berm_data(slope_val):
-    peak_h = 3.2
-    mu = 70 
-    sigma = 25 / (slope_val * 15) 
-    y = peak_h * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+def get_realistic_profile(slope_val):
+    mu = 75  # Position of the Ledge
+    # We make sigma extremely sensitive to slope to force visual change
+    sigma = 30 / (slope_val * 40) 
+    
+    # 1. The Ledge Face (Gaussian)
+    y = 3.2 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    
+    # 2. The Berm Flattening: Keep the height high for x > mu (the beach plateau)
+    y = np.where(x_vals > mu, 3.2 - (0.005 * (x_vals - mu)), y)
+    
+    # 3. Local Steepness (Derivative) for coloring
     dy = np.abs(np.gradient(y))
     return y, dy
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     with g_cols[i//5][i%5]:
-        y_vals, dy = get_berm_data(row['dynamic_slope'])
-        y_avg, _ = get_berm_data(avg_slope)
+        y_vals, dy = get_realistic_profile(row['dynamic_slope'])
+        y_avg, _ = get_realistic_profile(avg_slope)
         
         fig_mini = go.Figure()
 
-        # 1. Faint Average Reference
+        # Faint Average Reference (The 'Ghost' bank)
         fig_mini.add_trace(go.Scatter(
             x=x_vals, y=y_avg, 
-            line=dict(color='rgba(200, 200, 200, 0.2)', width=1, dash='dot'),
+            line=dict(color='rgba(150, 150, 150, 0.15)', width=1, dash='dot'),
             hoverinfo='none'
         ))
 
-        # 2. Daily Profile (Using BARS to allow per-point coloring)
+        # The Daily Profile (High-contrast Bars)
         fig_mini.add_trace(go.Bar(
             x=x_vals, y=y_vals,
             marker=dict(
                 color=dy, 
-                colorscale='Inferno', 
-                showscale=False
+                colorscale='Inferno', # Glows yellow at the steepest ledge
+                showscale=False,
+                line=dict(width=0) # Seamless look
             ),
-            width=1.2,
-            name='Steepness'
+            width=1.2
         ))
 
-        # 3. Tide Line
+        # The Tide Line (Intersects the Face)
         fig_mini.add_trace(go.Scatter(
-            x=[20, 100], y=[row['tide_level'], row['tide_level']], 
-            line=dict(color='cyan', width=2), 
+            x=[10, 100], y=[row['tide_level'], row['tide_level']], 
+            line=dict(color='cyan', width=3), 
             name='Tide'
         ))
         
         fig_mini.update_layout(
             height=200, margin=dict(l=0, r=0, t=40, b=0),
-            title={'text': f"<b>{date}</b><br>ξ {row['xi']:.2f}", 'font': {'size': 13}, 'x': 0.5},
+            title={'text': f"<b>{date}</b><br><span style='color:orange'>ξ {row['xi']:.2f}</span>", 'font': {'size': 13}, 'x': 0.5},
             xaxis=dict(visible=False), 
             yaxis=dict(range=[0, 4], visible=False),
             showlegend=False, barmode='overlay', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
