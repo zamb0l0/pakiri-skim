@@ -151,108 +151,85 @@ with g_col2:
     """)
 st.divider()
 
-# --- PARAMETRIC "HOLLOW" WAVE ENGINE (FIXED & WATERTIGHT) ---
-st.subheader("Pakiri Ledge: Hollow Barrel & Recede")
-
-# 1. The Organic Bank
-x_range = np.linspace(0, 60, 300)
-y_sand = 4 / (1 + np.exp(-0.2 * (x_range - 38)))
-y_sand = (y_sand - y_sand.min()) * (slope * 12)
-# Add seafloor corners for a solid fill
-x_poly = np.concatenate([[0], x_range, [60, 0]])
-
-current_tide = now_data['tide_level']
-h_s = now_data['swell_wave_height']
-xi = now_data['xi']
-
-n_frames = 100
-frames = []
-
-# --- RE-ENGINEERED ANIMATION LOOP ---
 for i in range(n_frames):
     t = i / n_frames
-    display_y = np.full_like(x_range, current_tide)
+    # display_y starts at y_sand to ensure water is never "under" the sand
+    display_y = np.copy(y_sand)
     foam_x, foam_y, spray_x, spray_y = [], [], [], []
 
-    # 1. THE SHOAL (Stages B-D)
-    if t < 0.3:
-        progress = t / 0.3
-        crest_x = progress * 30
+    # --- STAGES B-D: THE SHOAL (Building the Peaked Face) ---
+    if t < 0.35:
+        progress = t / 0.35
+        crest_x = progress * 35
+        # The 'Weight' of the wave increases as it approaches the ledge
         for j, x in enumerate(x_range):
             dist = x - crest_x
-            # Asymmetric face: steep front, trailing back
-            display_y[j] = current_tide + h_s * (np.exp(0.12 * dist) if dist < 0 else np.exp(-0.45 * dist))
+            # Trochoidal wave math: Steep face (right), Gradual back (left)
+            wave_height = h_s * (np.exp(0.12 * dist) if dist < 0 else np.exp(-0.5 * dist))
+            display_y[j] = np.maximum(y_sand[j], current_tide + wave_height)
 
-    # 2. THE PLUNGE (Stages E-G: The "Throw")
-    elif t < 0.65:
-        progress = (t - 0.3) / 0.35
-        crest_x = 30 + (progress * 10)
+    # --- STAGES E-G: THE PLUNGE (The Projectile Lip) ---
+    elif t < 0.7:
+        progress = (t - 0.35) / 0.35
+        crest_x = 35 + (progress * 5)
         
-        # Base water level
+        # Base body remains steep
         for j, x in enumerate(x_range):
             dist = x - crest_x
-            display_y[j] = current_tide + h_s * (np.exp(0.1 * dist) if dist < 0 else np.exp(-0.6 * dist))
+            wave_height = h_s * (np.exp(0.1 * dist) if dist < 0 else np.exp(-0.7 * dist))
+            display_y[j] = np.maximum(y_sand[j], current_tide + wave_height)
 
-        # Projectile Lip Geometry
-        # The lip is projected forward based on Iribarren number (xi)
-        throw_power = progress * (xi * 4.5)
-        gravity_drop = 6 * (progress**2)
+        # THE LIP (The 'Throw' from G): Parabolic Projectile Motion
+        # It detaches from the crest and shoots forward
+        throw_dist = progress * (xi * 5)
+        drop = 7 * (progress**2) 
         
-        # Parametric arc for the "C" shape barrel
-        phi = np.linspace(0, np.pi * 0.95, 40)
-        spray_x = crest_x + (throw_power * np.sin(phi/1.4))
-        spray_y = (current_tide + h_s) - gravity_drop + (h_s * 0.25 * np.cos(phi))
-        
-        # Offshore spray lines (Wind-blown)
-        if now_data['wind_speed'] > 14 and get_cardinal(now_data['wind_dir']) in ['W', 'SW', 'S']:
-            spray_x = np.append(spray_x, [crest_x - 1, crest_x - 4])
-            spray_y = np.append(spray_y, [current_tide + h_s + 0.4, current_tide + h_s + 1.0])
+        # This creates the "hollow" tube look by plotting a separate arc
+        phi = np.linspace(0, np.pi * 0.9, 40)
+        spray_x = crest_x + (throw_dist * np.sin(phi/1.3))
+        spray_y = (current_tide + h_s) - drop + (h_s * 0.3 * np.cos(phi))
+        # Ensure spray doesn't go below sand
+        spray_y = np.maximum(spray_y, [y_sand[np.abs(x_range - val).argmin()] for val in spray_x])
 
-    # 3. IMPACT & LINGERING WHITEWASH (Stage H)
-    elif t < 0.85:
-        progress = (t - 0.65) / 0.2
+    # --- STAGE H: IMPACT & PERSISTENT SWASH ---
+    elif t < 0.9:
+        progress = (t - 0.7) / 0.2
         impact_x = 40
-        # Swash moves fast initially, then slows
-        swash_reach = (h_s * 16) * np.sin(progress * (np.pi/2))
+        swash_reach = (h_s * 15) * np.sin(progress * (np.pi/2))
         
+        # The water "sheets" over the sand
         mask = (x_range >= impact_x) & (x_range <= impact_x + swash_reach)
-        # Water thins out as it flows up the bank
-        thickness = 0.3 * (1 - (progress * 0.75))
+        thickness = 0.2 * (1 - progress)
         display_y[mask] = y_sand[mask] + thickness
         
-        # Whitewash particle cluster
-        foam_x = np.random.uniform(impact_x - 2, impact_x + swash_reach, 30)
+        # Persistent Whitewash (Random clusters on the slope)
+        foam_x = np.random.uniform(impact_x - 1, impact_x + swash_reach, 35)
         foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.25 for val in foam_x]
 
-    # 4. THE SUCK-BACK (Backwash)
+    # --- THE BACKWASH (Suck-back) ---
     else:
-        progress = (t - 0.85) / 0.15
-        reach = (h_s * 16) * (1 - progress)
+        progress = (t - 0.9) / 0.1
+        reach = (h_s * 15) * (1 - progress)
         mask = (x_range >= 38) & (x_range <= 40 + reach)
-        display_y[mask] = y_sand[mask] + 0.08
+        display_y[mask] = y_sand[mask] + 0.05
         
-        # Lingering bubbles on the sand
-        foam_x = np.random.uniform(38, 40 + reach, 12)
+        # Residual foam bubbles
+        foam_x = np.random.uniform(38, 40 + reach, 15)
         foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.05 for val in foam_x]
-
-    # Final "Watertight" Geometry for Polygon
-    y_capped = np.maximum(y_sand, display_y)
-    y_poly = np.concatenate([[0], y_capped, [0, 0]])
 
     frames.append(go.Frame(
         data=[
-            # The Sandbank
-            go.Scatter(x=x_poly, y=np.concatenate([[0], y_sand, [0, 0]]), fill='toself', 
-                       line=dict(color='#C2B280', width=2.5), name="Bank", hoverinfo='skip'),
-            # The Water Body
-            go.Scatter(x=x_poly, y=y_poly, fill='toself', 
-                       line=dict(color='rgba(41, 128, 185, 0.9)', width=0), name="Ocean", hoverinfo='skip'),
-            # The Whitewash (Particles)
+            # LAYER 1: THE SAND (Solid Base)
+            go.Scatter(x=x_range, y=y_sand, fill='tozeroy', 
+                       line=dict(color='#C2B280', width=3), fillcolor='#C2B280', name="Bank"),
+            # LAYER 2: THE WATER (Fills 'To Next Y' - meaning it stays on top of sand)
+            go.Scatter(x=x_range, y=display_y, fill='tonexty', 
+                       line=dict(color='rgba(41, 128, 185, 0.8)', width=1), fillcolor='rgba(41, 128, 185, 0.6)', name="Ocean"),
+            # LAYER 3: FOAM & SPRAY (Particles)
             go.Scatter(x=foam_x, y=foam_y, mode='markers', 
-                       marker=dict(color='white', size=np.random.randint(3, 7), opacity=0.7), showlegend=False),
-            # The Plunging Lip & Spray
-            go.Scatter(x=spray_x, y=spray_y, mode='lines+markers' if t < 0.65 else 'markers', 
-                       marker=dict(color='white', size=2), line=dict(color='white', width=4), showlegend=False)
+                       marker=dict(color='white', size=np.random.randint(2, 6), opacity=0.7)),
+            go.Scatter(x=spray_x, y=spray_y, mode='lines', 
+                       line=dict(color='white', width=4)) if len(spray_x) > 0 else go.Scatter(x=[None], y=[None])
         ],
         name=f'f{i}'
     ))
