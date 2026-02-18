@@ -35,12 +35,16 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📖 What is ξ (Iribarren)?")
-    st.write("""
+   st.divider()
+    st.subheader("📖 What is ξ (Iribarren)?")
+    # Notice the 'r' right before the triple quotes below!
+    st.write(r"""
     **The Iribarren Number** ($\xi$) describes how waves break based on beach steepness.
     - **High ξ (>1.2):** *Reflective*. Waves bounce off the sand. **This is the Ledge.**
     - **Low ξ (<0.4):** *Dissipative*. Waves crumble far out. **This is Flat.**
     """)
-    st.write("$$\\xi = \\frac{\\tan \\beta}{\\sqrt{H / L_0}}$$")
+    # Notice the 'r' here too
+    st.write(r"$$\xi = \frac{\tan \beta}{\sqrt{H / L_0}}$$")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=3600)
