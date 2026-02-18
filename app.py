@@ -144,16 +144,16 @@ with g_col2:
     """)
 st.divider()
 
-# --- SCIENTIFIC WAVE SHOALING & IMPACT SIM ---
-st.subheader("🌀 Pakiri Ledge: Shoaling & Impact Dynamics")
+# --- REFINED OCEAN WAVE & SPILL SIMULATION ---
+st.subheader("🌀 Pakiri Ledge: Fluid Dynamics Sim")
 
-# 1. Physics & Resolution
+# 1. Physics & Timing
 n_frames = 60 
-x_range = np.linspace(0, 60, 250) 
-y_sand = x_range * slope          
+x_beach = np.linspace(0, 60, 200) # Higher resolution for smoother fluid
+y_sand = x_beach * slope          
 current_tide = now_data['tide_level']
 impact_x = current_tide / slope
-h_base = now_data['swell_wave_height']
+h_s = now_data['swell_wave_height']
 xi = now_data['xi']
 
 frames = []
@@ -161,51 +161,52 @@ frames = []
 for i in range(n_frames):
     t = i / n_frames
     
-    # --- WAVE SHOALING (Compression & Growth) ---
-    # Crest moves toward impact_x; it grows taller as water gets shallower
-    crest_x = t * impact_x
-    shoal_amp = h_base * (1 + (crest_x / impact_x) * 0.6) if crest_x < impact_x else h_base * 1.6
-    width = 18 * (1 - (crest_x / (impact_x * 1.3))) # Wavelength bunches up
+    # --- THE WAVE BODY ---
+    # Crest moves from left toward impact_x
+    crest_center = 5 + (t * (impact_x - 5))
+    # Wave shape (Asymmetric: steeper front, flatter back)
+    wave_shape = h_s * np.exp(-((x_beach - crest_center)**2) / (15 if x_beach[0] < crest_center else 5))
     
-    wave_body = shoal_amp * np.exp(-((x_range - crest_x)**2) / width)
-    
-    # --- BREAKING & WASH (The Tea Cup Spill) ---
-    wash_y = np.zeros_like(x_range)
+    # --- THE PLUNGING LIP ---
     lip_x, lip_y = [], []
+    if t > 0.6 and t < 0.9: # The 'Pitching' phase
+        pitch_t = (t - 0.6) / 0.3
+        # Parametric curl (The Spiral)
+        lip_x = [crest_center, crest_center + (pitch_t * xi * 2)]
+        lip_y = [current_tide + wave_shape.max(), current_tide + wave_shape.max() * (1 - pitch_t)]
     
-    if t > 0.65: # The Breaker Phase
-        progress = (t - 0.65) / 0.35
-        # The 'Throwing Lip' white line
-        lip_throw = progress * xi * 2.5
-        lip_x = [crest_x, crest_x + lip_throw]
-        lip_y = [current_tide + wave_body.max(), current_tide + (wave_body.max() * (1 - progress))]
+    # --- THE SPILL (Tea Cup Logic) ---
+    # Water must always be >= y_sand
+    # We calculate the "surge" height after the wave hits the bank
+    surge_y = np.zeros_like(x_beach)
+    if t > 0.8:
+        surge_t = (t - 0.8) / 0.2
+        reach_max = (h_s * 1.5) / slope # How far it pushes up
+        current_reach = surge_t * reach_max
         
-        if t > 0.8: # The Surge up the bank
-            surge_p = (t - 0.8) / 0.2
-            max_wash = (shoal_amp * 2.5) / slope 
-            wash_end = impact_x + (surge_p * max_wash)
-            mask = (x_range >= impact_x) & (x_range <= wash_end)
-            wash_y[mask] = 0.12 * (1 - (x_range[mask] - impact_x)/max_wash)
+        # Define the thin film of water moving up the slope
+        mask = (x_beach >= impact_x) & (x_beach <= impact_x + current_reach)
+        surge_y[mask] = 0.15 * (1 - (x_beach[mask] - impact_x)/reach_max) # Thinning as it climbs
 
-    # FINAL WATER LAYER: Must be >= y_sand (Tea Cup Logic)
-    water_surface = np.maximum(y_sand, current_tide + wave_body + wash_y)
+    # Final Water Surface: Max of (Tide + Wave + Surge) vs Sand
+    # This ensures water flows UP the sand, never THROUGH it
+    total_water = np.maximum(y_sand, current_tide + wave_shape + surge_y)
 
     frames.append(go.Frame(
         data=[
-            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Sand"),
-            go.Scatter(x=x_range, y=water_surface, fill='toself', line=dict(color='rgba(0, 105, 148, 0.7)', width=1), name="Water"),
+            go.Scatter(x=x_beach, y=y_sand, fill='toself', line=dict(color='burlywood', width=3), name="Sand"),
+            go.Scatter(x=x_beach, y=total_water, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=1), name="Water"),
             go.Scatter(x=lip_x, y=lip_y, mode='lines', line=dict(color='white', width=5)) if lip_x else go.Scatter()
         ],
         name=f'f{i}'
     ))
 
-# 2. Build Figure with 30fps (33ms duration)
 fig_sim = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], title="Distance (m)", showgrid=False),
-        yaxis=dict(range=[0, 7], title="Elevation (m)", showgrid=False),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Simulate Set", method="animate", 
+        xaxis=dict(range=[0, 60], autorange=False, title="Meters from Low Tide"),
+        yaxis=dict(range=[0, 6], autorange=False, title="Elevation (m)"),
+        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Play Wave", method="animate", 
                           args=[None, {"frame": {"duration": 33, "redraw": True}, "mode": "immediate"}])])],
         plot_bgcolor='white'
     ),
@@ -213,6 +214,37 @@ fig_sim = go.Figure(
 )
 
 st.plotly_chart(fig_sim, use_container_width=True)
+
+# --- 10-DAY GRID ---
+st.subheader("🗓️ 10-Day Skim Forecast")
+
+df['date_label'] = df['time'].dt.strftime('%a, %b %d')
+daily = df.groupby('date_label').agg({
+    'xi': 'max', 'swell_wave_height': 'mean', 
+    'swell_wave_period': 'max', 'swell_wave_direction': 'mean',
+    'wind_dir': 'mean', 'wind_speed': 'max', 'time': 'first', 'tide_level': 'max'
+}).reindex(df['date_label'].unique())
+
+cols = [st.columns(5), st.columns(5)]
+for i, (date, row) in enumerate(daily.iterrows()):
+    color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'], row['tide_level'])
+    tide_dt = get_high_tide_dt(row['time'])
+    session_start = (tide_dt - timedelta(hours=1)).strftime('%I:%M')
+    session_end = (tide_dt + timedelta(minutes=90)).strftime('%I:%M %p')
+    
+    with cols[i//5][i%5]:
+        st.markdown(f"""
+            <div class='card {color}'>
+                <div style='font-size: 0.85em; opacity: 0.8;'>{date}</div>
+                <div style='font-size: 1.2em; margin: 4px 0;'><strong>{label}</strong></div>
+                <div style='font-size: 1.0em;'>🌊 <b>{row['swell_wave_height']:.1f}m</b> @ {row['swell_wave_period']:.0f}s</div>
+                <div style='font-size: 0.85em; opacity: 0.9;'>Swell: {get_arrow_with_name(row['swell_wave_direction'])}</div>
+                <div style='font-size: 0.85em; opacity: 0.9;'>Wind: {get_arrow_with_name(row['wind_dir'])}</div>
+                <div class='session-time'>🎯 Best: {session_start} - {session_end}</div>
+                <hr style='margin:8px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
+                <div style='font-size: 1.1em;'>ξ {row['xi']:.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # --- SCROLLABLE CHART ---
 st.divider()
