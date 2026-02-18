@@ -144,16 +144,16 @@ with g_col2:
     """)
 st.divider()
 
-# --- REFINED OCEAN WAVE & SPILL SIMULATION ---
-st.subheader("🌀 Pakiri Ledge: Fluid Dynamics Sim")
+# --- SCIENTIFIC WAVE SHOALING & IMPACT SIM ---
+st.subheader("🌀 Pakiri Ledge: Shoaling & Impact Dynamics")
 
-# 1. Physics & Timing
+# 1. Physics & Resolution
 n_frames = 60 
-x_beach = np.linspace(0, 60, 200) # Higher resolution for smoother fluid
-y_sand = x_beach * slope          
+x_range = np.linspace(0, 60, 250) 
+y_sand = x_range * slope          
 current_tide = now_data['tide_level']
 impact_x = current_tide / slope
-h_s = now_data['swell_wave_height']
+h_base = now_data['swell_wave_height']
 xi = now_data['xi']
 
 frames = []
@@ -161,59 +161,70 @@ frames = []
 for i in range(n_frames):
     t = i / n_frames
     
-    # --- THE WAVE BODY ---
-    # Crest moves from left toward impact_x
-    crest_center = 5 + (t * (impact_x - 5))
-    # Wave shape (Asymmetric: steeper front, flatter back)
-    wave_shape = h_s * np.exp(-((x_beach - crest_center)**2) / (15 if x_beach[0] < crest_center else 5))
+    # --- WAVE EVOLUTION (SHOALING) ---
+    # Crest moves toward the impact zone
+    crest_x = t * impact_x
     
-    # --- THE PLUNGING LIP ---
+    # Shoaling: Wave height increases as it gets shallower
+    shoal_amp = h_base * (1 + (crest_x / impact_x) * 0.6) if crest_x < impact_x else h_base * 1.6
+    
+    # Wavelength compression: Wave narrows as it nears the shore
+    width = 18 * (1 - (crest_x / (impact_x * 1.3))) 
+    
+    # Primary wave shape (steeper front face)
+    wave_body = shoal_amp * np.exp(-((x_range - crest_x)**2) / width)
+    
+    # --- BREAKING & WASH ---
+    wash_y = np.zeros_like(x_range)
     lip_x, lip_y = [], []
-    if t > 0.6 and t < 0.9: # The 'Pitching' phase
-        pitch_t = (t - 0.6) / 0.3
-        # Parametric curl (The Spiral)
-        lip_x = [crest_center, crest_center + (pitch_t * xi * 2)]
-        lip_y = [current_tide + wave_shape.max(), current_tide + wave_shape.max() * (1 - pitch_t)]
     
-    # --- THE SPILL (Tea Cup Logic) ---
-    # Water must always be >= y_sand
-    # We calculate the "surge" height after the wave hits the bank
-    surge_y = np.zeros_like(x_beach)
-    if t > 0.8:
-        surge_t = (t - 0.8) / 0.2
-        reach_max = (h_s * 1.5) / slope # How far it pushes up
-        current_reach = surge_t * reach_max
+    if t > 0.65:  # Pitching phase starts
+        progress = (t - 0.65) / 0.35
+        # The 'Lip' (The white crest in your blueprint)
+        lip_throw = progress * xi * 2.5
+        lip_x = [crest_x, crest_x + lip_throw]
+        lip_y = [current_tide + wave_body.max(), current_tide + (wave_body.max() * (1 - progress))]
         
-        # Define the thin film of water moving up the slope
-        mask = (x_beach >= impact_x) & (x_beach <= impact_x + current_reach)
-        surge_y[mask] = 0.15 * (1 - (x_beach[mask] - impact_x)/reach_max) # Thinning as it climbs
+        # The Spill/Wash (Tea Cup flow up the bank)
+        if t > 0.8:
+            surge_p = (t - 0.8) / 0.2
+            max_wash = (shoal_amp * 2.5) / slope 
+            current_wash_x = impact_x + (surge_p * max_wash)
+            
+            # Mask to draw the thin film of water climbing the sand
+            mask = (x_range >= impact_x) & (x_range <= current_wash_x)
+            wash_y[mask] = 0.12 * (1 - (x_range[mask] - impact_x)/max_wash)
 
-    # Final Water Surface: Max of (Tide + Wave + Surge) vs Sand
-    # This ensures water flows UP the sand, never THROUGH it
-    total_water = np.maximum(y_sand, current_tide + wave_shape + surge_y)
+    # FINAL WATER LAYER: Must be >= y_sand (Tea Cup Logic)
+    # This clips the water so it follows the bottom/bank perfectly
+    water_surface = np.maximum(y_sand, current_tide + wave_body + wash_y)
 
     frames.append(go.Frame(
         data=[
-            go.Scatter(x=x_beach, y=y_sand, fill='toself', line=dict(color='burlywood', width=3), name="Sand"),
-            go.Scatter(x=x_beach, y=total_water, fill='toself', line=dict(color='rgba(41, 128, 185, 0.8)', width=1), name="Water"),
-            go.Scatter(x=lip_x, y=lip_y, mode='lines', line=dict(color='white', width=5)) if lip_x else go.Scatter()
+            # The Sand Bank (Brown)
+            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Sand"),
+            # The Ocean Body (Blue)
+            go.Scatter(x=x_range, y=water_surface, fill='toself', line=dict(color='rgba(0, 105, 148, 0.7)', width=1), name="Water"),
+            # The Breaking Lip (White)
+            go.Scatter(x=lip_x, y=lip_y, mode='lines', line=dict(color='white', width=4)) if lip_x else go.Scatter()
         ],
         name=f'f{i}'
     ))
 
-fig_sim = go.Figure(
+# 2. Build Figure with 30fps (33ms)
+fig_final = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], autorange=False, title="Meters from Low Tide"),
-        yaxis=dict(range=[0, 6], autorange=False, title="Elevation (m)"),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Play Wave", method="animate", 
+        xaxis=dict(range=[0, 60], title="Distance (m)", showgrid=False),
+        yaxis=dict(range=[0, 7], title="Elevation (m)", showgrid=False),
+        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Simulate Set", method="animate", 
                           args=[None, {"frame": {"duration": 33, "redraw": True}, "mode": "immediate"}])])],
         plot_bgcolor='white'
     ),
     frames=frames
 )
 
-st.plotly_chart(fig_sim, use_container_width=True)
+st.plotly_chart(fig_final, use_container_width=True)
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
