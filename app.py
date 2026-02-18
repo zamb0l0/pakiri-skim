@@ -151,106 +151,107 @@ with g_col2:
     """)
 st.divider()
 
-# --- ANIMATION CONSTANTS ---
-n_frames = 100  # <--- Define this to fix the NameError
-x_range = np.linspace(0, 60, 300)
-x_poly = np.concatenate([[0], x_range, [60, 0]])
+import numpy as np
+import plotly.graph_objects as go
 
-# Define the Organic Bank (The Sand)
-y_sand = 4 / (1 + np.exp(-0.25 * (x_range - 38)))
+# --- 1. SETUP CONSTANTS ---
+n_frames = 60 # Reduced for smoothness/less flickering
+x_range = np.linspace(0, 60, 200)
+
+# The Sandbank (Solid cross-section)
+y_sand = 4 / (1 + np.exp(-0.25 * (x_range - 40)))
 y_sand = (y_sand - y_sand.min()) * (slope * 12)
 
-current_tide = now_data['tide_level']
+# Dynamic variables from your data
 h_s = now_data['swell_wave_height']
 xi = now_data['xi']
+tide = now_data['tide_level']
 
 frames = []
 
 for i in range(n_frames):
     t = i / n_frames
-    # display_y starts as a copy of y_sand so water never goes below it
-    display_y = np.copy(y_sand)
-    foam_x, foam_y, spray_x, spray_y = [], [], [], []
+    # Water surface starts exactly on top of the sand
+    y_water = np.copy(y_sand)
+    
+    # --- PHASE A: THE ROUNDED LUMP (0.0 - 0.4) ---
+    if t < 0.4:
+        p = t / 0.4
+        crest_x = p * 38
+        # "Lump" height grows as it approaches the bank
+        amp = h_s * (1 + p * 0.5)
+        # Use a Gaussian curve for a "round lump" look
+        width = 8 - (p * 3) # Gets narrower/steeper
+        y_wave = amp * np.exp(-((x_range - crest_x)**2) / (2 * width**2))
+        y_water = np.maximum(y_water, tide + y_wave)
+        lip_x, lip_y = [None], [None]
 
-    # --- STAGES B-D: THE SHOAL ---
-    if t < 0.35:
-        progress = t / 0.35
-        crest_x = progress * 35
-        for j, x in enumerate(x_range):
-            dist = x - crest_x
-            wave_height = h_s * (np.exp(0.12 * dist) if dist < 0 else np.exp(-0.5 * dist))
-            display_y[j] = np.maximum(y_sand[j], current_tide + wave_height)
-
-    # --- STAGES E-G: THE PLUNGE (The "Throw") ---
+    # --- PHASE B: THE PITCH & BARREL (0.4 - 0.7) ---
     elif t < 0.7:
-        progress = (t - 0.35) / 0.35
-        crest_x = 35 + (progress * 5)
-        for j, x in enumerate(x_range):
-            dist = x - crest_x
-            wave_height = h_s * (np.exp(0.1 * dist) if dist < 0 else np.exp(-0.7 * dist))
-            display_y[j] = np.maximum(y_sand[j], current_tide + wave_height)
-
-        # The Projectile Lip (Stage G) - Curves forward and down
-        throw_dist = progress * (xi * 5.5)
-        drop = 7.5 * (progress**2) 
-        phi = np.linspace(0, np.pi * 0.9, 40)
-        spray_x = crest_x + (throw_dist * np.sin(phi/1.3))
-        spray_y = (current_tide + h_s) - drop + (h_s * 0.3 * np.cos(phi))
-        # Snap spray to sand height if it impacts
-        sand_heights = np.interp(spray_x, x_range, y_sand)
-        spray_y = np.maximum(spray_y, sand_heights)
-
-    # --- STAGE H: IMPACT & THINNING SWASH ---
-    elif t < 0.9:
-        progress = (t - 0.7) / 0.2
-        impact_x = 40
-        swash_reach = (h_s * 15) * np.sin(progress * (np.pi/2))
-        mask = (x_range >= impact_x) & (x_range <= impact_x + swash_reach)
-        thickness = 0.22 * (1 - progress)
-        display_y[mask] = y_sand[mask] + thickness
+        p = (t - 0.4) / 0.3
+        crest_x = 38 + (p * 4)
+        amp = h_s * 1.5
         
-        # Whitewash clusters
-        foam_x = np.random.uniform(impact_x - 1, impact_x + swash_reach, 35)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.25 for val in foam_x]
-
-    # --- THE BACKWASH ---
+        # Main body of the wave (the "Wall")
+        y_wave = amp * np.exp(-((x_range - (crest_x - 2))**2) / (2 * 4**2))
+        y_water = np.maximum(y_water, tide + y_wave)
+        
+        # THE LIP: A parametric 'C' shape for the barrel
+        # Throw distance is driven by Iribarren (xi)
+        throw = p * (xi * 6)
+        drop = 8 * (p**2)
+        phi = np.linspace(-np.pi/2, np.pi, 20)
+        lip_x = crest_x + (throw * np.cos(phi/2))
+        lip_y = (tide + amp) - drop + (amp * 0.3 * np.sin(phi))
+        
+    # --- PHASE C: THE REFLECTION/SWASH (0.7 - 1.0) ---
     else:
-        progress = (t - 0.9) / 0.1
-        reach = (h_s * 15) * (1 - progress)
-        mask = (x_range >= 38) & (x_range <= 40 + reach)
-        display_y[mask] = y_sand[mask] + 0.06
-        foam_x = np.random.uniform(38, 40 + reach, 15)
-        foam_y = [y_sand[np.abs(x_range - val).argmin()] + 0.05 for val in foam_x]
+        p = (t - 0.7) / 0.3
+        impact_x = 42
+        # Reflection/Swash reach
+        reach = (h_s * 15) * np.sin(p * np.pi) 
+        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
+        # Water thins out as it reflects
+        y_water[mask] = y_sand[mask] + (0.3 * (1 - p))
+        lip_x, lip_y = [None], [None]
 
+    # --- 2. CREATE FRAME ---
     frames.append(go.Frame(
         data=[
-            # Layer 1: The Sandbank (Solid base)
+            # SAND LAYER
             go.Scatter(x=x_range, y=y_sand, fill='tozeroy', 
-                       line=dict(color='#C2B280', width=3), fillcolor='#C2B280', name="Bank"),
-            # Layer 2: The Water (Plotted on top of sand)
-            go.Scatter(x=x_range, y=display_y, fill='tonexty', 
-                       line=dict(color='rgba(41, 128, 185, 0.8)', width=1), fillcolor='rgba(41, 128, 185, 0.6)', name="Ocean"),
-            # Layer 3: Foam and Lip
-            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=4, opacity=0.7)),
-            go.Scatter(x=spray_x, y=spray_y, mode='lines', line=dict(color='white', width=4)) if len(spray_x) > 0 else go.Scatter(x=[None], y=[None])
+                       fillcolor='#C2B280', line=dict(color='#A68D60', width=2)),
+            # WATER LAYER (sitting on sand)
+            go.Scatter(x=x_range, y=y_water, fill='tonexty', 
+                       fillcolor='rgba(0, 105, 148, 0.6)', line=dict(color='#006994', width=2)),
+            # LIP/BARREL LAYER
+            go.Scatter(x=lip_x, y=lip_y, mode='lines', 
+                       line=dict(color='white', width=4))
         ],
         name=f'f{i}'
     ))
 
+# --- 3. CONFIGURE PLOT ---
 fig_ledge = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
-        xaxis=dict(range=[0, 60], showgrid=False, zeroline=False, fixedrange=True),
-        yaxis=dict(range=[0, 7], showgrid=False, zeroline=False, fixedrange=True),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Play Set Loop", method="animate", 
-                          args=[None, {"frame": {"duration": 30, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
-        plot_bgcolor='white', height=400
+        xaxis=dict(range=[0, 60], autorange=False, showgrid=False, zeroline=False),
+        yaxis=dict(range=[0, 8], autorange=False, showgrid=False, zeroline=False),
+        updatemenus=[{
+            "type": "buttons",
+            "buttons": [{
+                "label": "🌊 Play Wave Cycle",
+                "method": "animate",
+                "args": [None, {"frame": {"duration": 33, "redraw": False}, "fromcurrent": True, "transition": {"duration": 0}}]
+            }]
+        }],
+        plot_bgcolor='white',
+        margin=dict(l=0, r=0, t=0, b=0)
     ),
     frames=frames
 )
 
 st.plotly_chart(fig_ledge, use_container_width=True)
-# fig_barrel chart call removed to prevent NameError
 
 # --- 10-DAY GRID ---
 st.subheader("10-Day Skim Forecast")
