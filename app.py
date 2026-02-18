@@ -31,19 +31,16 @@ with st.sidebar:
     
     st.header("📸 Session Log")
     uploaded_file = st.file_uploader("Upload bank photo", type=['jpg', 'png'])
-    if uploaded_file: st.image(uploaded_file)
+    if uploaded_file: 
+        st.image(uploaded_file)
     
     st.divider()
     st.subheader("📖 What is ξ (Iribarren)?")
-   st.divider()
-    st.subheader("📖 What is ξ (Iribarren)?")
-    # Notice the 'r' right before the triple quotes below!
     st.write(r"""
     **The Iribarren Number** ($\xi$) describes how waves break based on beach steepness.
     - **High ξ (>1.2):** *Reflective*. Waves bounce off the sand. **This is the Ledge.**
     - **Low ξ (<0.4):** *Dissipative*. Waves crumble far out. **This is Flat.**
     """)
-    # Notice the 'r' here too
     st.write(r"$$\xi = \frac{\tan \beta}{\sqrt{H / L_0}}$$")
 
 # --- DATA FETCHING ---
