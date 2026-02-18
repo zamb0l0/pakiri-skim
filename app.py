@@ -158,7 +158,14 @@ fig.update_layout(
 )
 
 fig.add_hline(y=1.2, line_dash="dash", line_color="rgba(0,0,0,0.3)", annotation_text="Ledge Threshold")
-fig.add_vline(x=datetime.now(), line_width=2, line_dash="solid", line_color="red", annotation_text="NOW")
+# Convert now to a string format Plotly handles better for vlines
+fig.add_vline(
+    x=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+    line_width=2, 
+    line_dash="solid", 
+    line_color="red", 
+    annotation_text="NOW"
+)
 
 st.components.v1.html(
     f'<div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">{fig.to_html(include_plotlyjs="cdn", full_html=False)}</div>',
