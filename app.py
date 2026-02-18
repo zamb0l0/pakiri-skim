@@ -61,20 +61,15 @@ def get_full_data():
     df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
     df['xi'] = slope / (np.sqrt(df['swell_wave_height'] / df['wavelength']))
     
-    # Simple Tide Approximation (Sine wave overlay for the chart)
+    # Smooth Tide Approximation (Subtle Sine Wave)
     ref = datetime(2026, 2, 18, 8, 15)
     df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
-    df['tide_level'] = 1.2 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.4) + 1.2
+    # 0.7 amplitude makes the curve smooth and "shorter"
+    df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
     
     return df
 
 df = get_full_data()
-
-# Simple Tide Approximation (Smooth sine wave)
-    ref = datetime(2026, 2, 18, 8, 15)
-    df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
-    # Change 1.2 to 0.7 for a smoother, less dramatic height
-    df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
 
 # --- HELPERS ---
 def get_cardinal(degrees):
@@ -82,7 +77,6 @@ def get_cardinal(degrees):
     return dirs[int((degrees + 11.25) / 22.5) % 16]
 
 def get_high_tide(dt_obj):
-    # Reference Tide: Feb 18, 2026 @ 08:15 AM
     ref = datetime(2026, 2, 18, 8, 15)
     days_diff = (dt_obj.replace(tzinfo=None) - ref).days
     tide_dt = ref + timedelta(minutes=days_diff * 50)
@@ -92,22 +86,16 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed):
     score = xi * 10
     wind_card = get_cardinal(wind_deg)
     
-    # Height Sweet Spot
     if 0.3 <= h <= 0.6: score += 7
     elif 0.6 < h <= 0.9: score += 3
     
-    # Period Logic
     if t >= 11: score += 5
     elif t <= 8: score += 3
     
-    # Legend Detection
     if t >= 13 and xi > 1.2: return "bg-blue", "🏆 DEC 8th BERM"
     if swell_dir < 45 and wind_card in ['S', 'SSW', 'SW']: return "bg-blue", "🌪️ RIVERMOUTH WRAP"
-    
-    # Wind Penalty (If blowing over 25km/h, it ruins the face)
     if wind_speed > 25: return "bg-orange", "TOO WINDY"
     
-    # Traffic Lights
     if score > 18: return "bg-darkgreen", "PREMIUM"
     if score > 14: return "bg-lightgreen", "GOOD"
     if score > 10: return "bg-yellow", "AVERAGE"
@@ -125,7 +113,6 @@ daily = df.groupby('date_label').agg({
 
 cols = [st.columns(5), st.columns(5)]
 for i, (date, row) in enumerate(daily.iterrows()):
-    # Pass wind_speed into the expert logic
     color, label = get_expert_score(row['xi'], row['swell_wave_height'], row['swell_wave_period'], row['swell_wave_direction'], row['wind_dir'], row['wind_speed'])
     t_time = get_high_tide(row['time'])
     
@@ -141,70 +128,39 @@ for i, (date, row) in enumerate(daily.iterrows()):
             </div>
             """, unsafe_allow_html=True)
 
-# --- SCROLLABLE CHART WITH TIDE OVERLAY ---
+# --- SCROLLABLE CHART ---
 st.divider()
 st.subheader("📈 10-Day Detail: Quality vs Tide")
 st.write("*(Scroll sideways on mobile to see the full week)*")
 
 fig = go.Figure()
 
-# 1. Smooth Black Tide Line (Secondary Y-Axis)
+# 1. Smooth Black Tide Line (Squashed to bottom)
 fig.add_trace(go.Scatter(
-    x=df['time'], 
-    y=df['tide_level'], 
-    name="Tide Cycle", 
-    line=dict(color='black', width=1.5, shape='spline'), # 'spline' makes it a smooth curve
+    x=df['time'], y=df['tide_level'], name="Tide Height", 
+    line=dict(color='black', width=1.5, shape='spline'), 
     yaxis="y2"
 ))
 
-# 2. Quality Line (Bold Gold Line)
+# 2. Quality Line (Bold Gold)
 fig.add_trace(go.Scatter(
-    x=df['time'], 
-    y=df['xi'], 
-    name="Quality (ξ)", 
+    x=df['time'], y=df['xi'], name="Quality (ξ)", 
     line=dict(color='#f1c40f', width=5, shape='spline')
 ))
 
-# 3. Layout Adjustments
 fig.update_layout(
     hovermode="x unified",
-    height=500,
-    width=1800, # Stretched for better scrolling
+    height=500, width=1800,
     margin=dict(l=50, r=50, t=30, b=30),
     yaxis=dict(title="Quality (ξ)", range=[0, 2]),
-    yaxis2=dict(
-        title="Tide", 
-        overlaying="y", 
-        side="right", 
-        range=[0, 5], # Setting range to 5 squashes the 1.2m tide to the bottom
-        showgrid=False
-    ),
+    yaxis2=dict(title="Tide", overlaying="y", side="right", range=[0, 5], showgrid=False),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 
-# Add Current Time Vertical Line
-fig.add_vline(x=datetime.now(), line_width=2, line_dash="dash", line_color="red", annotation_text="NOW")
-
-# 3. Layout Adjustments for Scrolling and Dual Axis
-fig.update_layout(
-    hovermode="x unified",
-    height=500,
-    width=1500,  # Stretching the width to make it scrollable
-    margin=dict(l=50, r=50, t=30, b=30),
-    yaxis=dict(title="Quality (ξ)", range=[0, 2]),
-    yaxis2=dict(title="Tide (m)", overlaying="y", side="right", range=[0, 3]),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-)
-
-# Ledge Threshold Line
 fig.add_hline(y=1.2, line_dash="dash", line_color="rgba(0,0,0,0.3)", annotation_text="Ledge Threshold")
+fig.add_vline(x=datetime.now(), line_width=2, line_dash="solid", line_color="red", annotation_text="NOW")
 
-# Wrap in a container to enable scrolling
 st.components.v1.html(
-    f"""
-    <div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">
-        {fig.to_html(include_plotlyjs='cdn', full_html=False)}
-    </div>
-    """,
+    f'<div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">{fig.to_html(include_plotlyjs="cdn", full_html=False)}</div>',
     height=550,
 )
