@@ -202,52 +202,66 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- EXAGGERATED: BERM DYNAMICS, REFLECTION & SAND VOLUME ---
-st.divider()
-st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Visuals are **highly exaggerated** to show daily variance. 💥 = Ledge Strike Zone. **R%** = Backwash Power.")
+import numpy as np
+import plotly.graph_objects as go
 
-df['date_label'] = df['time'].dt.strftime('%a, %b %d')
-daily_geom = df.groupby('date_label').agg({
-    'xi':'max', 'tide_level':'max', 'dynamic_slope':'max', 'swell_wave_height':'mean', 'wavelength':'mean', 'R':'max'
-}).reindex(df['date_label'].unique())
+# 1. Create a synthetic beach profile (Berm shape)
+x = np.linspace(0, 50, 100)
+# A simple sigmoid-like curve to simulate a beach berm
+y = 5 / (1 + np.exp(0.2 * (x - 25))) 
 
-avg_slope = daily_geom['dynamic_slope'].mean()
-avg_xi = daily_geom['xi'].mean()
-g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(10, 100, 100)
+# 2. Calculate the slope angle at a specific point (e.g., mid-point)
+# In real data, you'd use np.diff(y) / np.diff(x)
+idx = 45 # Pick a point on the face of the berm
+dx = x[idx+1] - x[idx]
+dy = y[idx+1] - y[idx]
+slope = dy / dx
+angle_deg = abs(np.degrees(np.arctan(slope)))
 
-def get_extreme_profile(slope_val, xi_val):
-    mu = 90 - (slope_val * 90) 
-    sigma = 25 / (xi_val ** 3.0) 
-    y = 3.6 * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
-    y = np.where(x_vals > mu, 3.6 + (0.012 * (x_vals - mu)), y)
-    return y, mu
+# 3. Create the Plotly Figure
+fig = go.Figure()
 
-for i, (date, row) in enumerate(daily_geom.iterrows()):
-    if pd.isna(row['xi']): continue
-    with g_cols[i//5][i%5]:
-        y_vals, ledge_x = get_extreme_profile(row['dynamic_slope'], row['xi'])
-        y_avg, _ = get_extreme_profile(avg_slope, avg_xi) 
-        dy = np.abs(np.gradient(y_vals))
+# Plot the Beach Profile
+fig.add_trace(go.Scatter(
+    x=x, y=y,
+    mode='lines',
+    fill='tozeroy',
+    name='Beach Profile',
+    line=dict(color='burlywood', width=3)
+))
 
-        fig_mini = go.Figure()
-        fig_mini.add_trace(go.Scatter(x=x_vals, y=y_avg, line=dict(color='rgba(200, 200, 200, 0.08)', width=1, dash='dot'), hoverinfo='none'))
-        fig_mini.add_trace(go.Bar(x=x_vals, y=y_vals, marker=dict(color=dy, colorscale='Hot', showscale=False), width=1.1))
-        fig_mini.add_trace(go.Scatter(x=[10, 100], y=[row['tide_level'], row['tide_level']], line=dict(color='cyan', width=5)))
+# 4. Add the "Architectural" Angle Arc
+# We draw a small circle segment at the calculation point
+arc_radius = 5
+t = np.linspace(0, np.radians(angle_deg), 20)
+arc_x = x[idx] + arc_radius * np.cos(t)
+arc_y = y[idx] + arc_radius * np.sin(t)
 
-        if row['xi'] > 1.3:
-            fig_mini.add_annotation(x=ledge_x, y=row['tide_level'], text="💥", showarrow=False, font=dict(size=22))
-        
-        fig_mini.update_layout(height=250, margin=dict(l=0, r=0, t=60, b=0),
-            title={'text': f"<b>{date}</b><br><span style='color:cyan;'>R: {row['R']:.0f}%</span>", 'font': {'size': 14}, 'x': 0.5},
-            xaxis=dict(visible=False), yaxis=dict(range=[0, 5.5], visible=False), showlegend=False, barmode='overlay', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+fig.add_trace(go.Scatter(
+    x=arc_x, y=arc_y,
+    mode='lines',
+    line=dict(color='red', dash='dot'),
+    name='Slope Angle'
+))
 
-        st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
-        
-        v_state = "BUILDING" if (row['swell_wave_height']/row['wavelength']) < 0.02 else "ERODING"
-        v_color = "gold" if v_state == "BUILDING" else "gray"
-        st.markdown(f"<div style='text-align:center; font-size:10px; color:{v_color};'>BANK {v_state}</div>", unsafe_allow_html=True)
+# Add the Angle Label
+fig.add_annotation(
+    x=x[idx] + 7, y=y[idx] + 1,
+    text=f"Slope: {angle_deg:.1f}°",
+    showarrow=False,
+    font=dict(size=14, color="red")
+)
+
+# Formatting
+fig.update_layout(
+    title="Beach Profile & Slope Analysis",
+    xaxis_title="Distance from Shoreline (m)",
+    yaxis_title="Elevation (m)",
+    yaxis=dict(scaleanchor="x", scaleratio=1), # IMPORTANT: Keeps 1:1 aspect ratio
+    template="simple_white"
+)
+
+fig.show()
 
 # --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
