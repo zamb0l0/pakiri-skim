@@ -144,87 +144,90 @@ with g_col2:
     """)
 st.divider()
 
-# --- SCIENTIFIC WAVE SHOALING & IMPACT SIM ---
-st.subheader("🌀 Pakiri Ledge: Shoaling & Impact Dynamics")
+# --- ORGANIC BANK & LOOPING WAVE SIMULATION ---
+st.subheader("🌀 Pakiri Ledge: Organic Interaction Sim")
 
-# 1. Physics & Resolution
-n_frames = 60 
-x_range = np.linspace(0, 60, 250) 
-y_sand = x_range * slope          
+# 1. Setup Organic Bank (Flat bottom, steep top)
+x_range = np.linspace(0, 60, 300)
+# A sigmoid-style curve creates a flat low-tide and a steep high-tide ledge
+y_sand = 5 / (1 + np.exp(-0.15 * (x_range - 35))) 
+# Normalize height to match your slope slider's intent at the midpoint
+y_sand = (y_sand - y_sand.min()) * (slope * 15)
+
 current_tide = now_data['tide_level']
-impact_x = current_tide / slope
 h_base = now_data['swell_wave_height']
 xi = now_data['xi']
 
+n_frames = 100 # More frames for a smooth recede
 frames = []
 
 for i in range(n_frames):
-    t = i / n_frames
+    t = i / n_frames # Time 0.0 to 1.0
     
-    # --- WAVE EVOLUTION (SHOALING) ---
-    # Crest moves toward the impact zone
-    crest_x = t * impact_x
+    # Define Wave Progress (0.0 to 0.7 is approach, 0.7 to 1.0 is wash/recede)
+    wave_y = np.full_like(x_range, current_tide)
+    foam_x, foam_y = [], []
     
-    # Shoaling: Wave height increases as it gets shallower
-    shoal_amp = h_base * (1 + (crest_x / impact_x) * 0.6) if crest_x < impact_x else h_base * 1.6
-    
-    # Wavelength compression: Wave narrows as it nears the shore
-    width = 18 * (1 - (crest_x / (impact_x * 1.3))) 
-    
-    # Primary wave shape (steeper front face)
-    wave_body = shoal_amp * np.exp(-((x_range - crest_x)**2) / width)
-    
-    # --- BREAKING & WASH ---
-    wash_y = np.zeros_like(x_range)
-    lip_x, lip_y = [], []
-    
-    if t > 0.65:  # Pitching phase starts
-        progress = (t - 0.65) / 0.35
-        # The 'Lip' (The white crest in your blueprint)
-        lip_throw = progress * xi * 2.5
-        lip_x = [crest_x, crest_x + lip_throw]
-        lip_y = [current_tide + wave_body.max(), current_tide + (wave_body.max() * (1 - progress))]
+    if t < 0.6: # APPROACH & SHOAL
+        crest_x = t * 60
+        # Local slope at the crest location
+        local_idx = np.abs(x_range - crest_x).argmin()
+        local_slope = np.gradient(y_sand)[local_idx]
         
-        # The Spill/Wash (Tea Cup flow up the bank)
-        if t > 0.8:
-            surge_p = (t - 0.8) / 0.2
-            max_wash = (shoal_amp * 2.5) / slope 
-            current_wash_x = impact_x + (surge_p * max_wash)
-            
-            # Mask to draw the thin film of water climbing the sand
-            mask = (x_range >= impact_x) & (x_range <= current_wash_x)
-            wash_y[mask] = 0.12 * (1 - (x_range[mask] - impact_x)/max_wash)
+        # Wave "Bumps up" based on local steepness
+        dynamic_h = h_base * (1 + (local_slope * 20))
+        wave_pulse = dynamic_h * np.exp(-((x_range - crest_x)**2) / 10)
+        wave_y = np.maximum(wave_y, current_tide + wave_pulse)
+        
+    elif t < 0.8: # IMPACT & SURGE UP
+        surge_t = (t - 0.6) / 0.2
+        impact_x = np.abs(y_sand - current_tide).argmin()
+        reach = (h_base * 10) * surge_t
+        
+        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
+        wave_y[mask] = np.maximum(wave_y[mask], y_sand[mask] + 0.2)
+        # Add Foam Line
+        foam_x = [impact_x + reach]
+        foam_y = [y_sand[np.abs(x_range - foam_x[0]).argmin()] + 0.1]
 
-    # FINAL WATER LAYER: Must be >= y_sand (Tea Cup Logic)
-    # This clips the water so it follows the bottom/bank perfectly
-    water_surface = np.maximum(y_sand, current_tide + wave_body + wash_y)
+    else: # RECEDE BACK
+        recede_t = (t - 0.8) / 0.2
+        impact_x = np.abs(y_sand - current_tide).argmin()
+        reach = (h_base * 10) * (1 - recede_t)
+        
+        mask = (x_range >= impact_x) & (x_range <= impact_x + reach)
+        wave_y[mask] = np.maximum(wave_y[mask], y_sand[mask] + 0.1)
+
+    # ENSURE WATER IS LEVEL & CLIPPED
+    # Level ocean surface + the wave/wash components
+    water_surface = np.maximum(y_sand, wave_y)
 
     frames.append(go.Frame(
         data=[
-            # The Sand Bank (Brown)
-            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Sand"),
-            # The Ocean Body (Blue)
-            go.Scatter(x=x_range, y=water_surface, fill='toself', line=dict(color='rgba(0, 105, 148, 0.7)', width=1), name="Water"),
-            # The Breaking Lip (White)
-            go.Scatter(x=lip_x, y=lip_y, mode='lines', line=dict(color='white', width=4)) if lip_x else go.Scatter()
+            # The Bank
+            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Bank"),
+            # The Water Mass
+            go.Scatter(x=x_range, y=water_surface, fill='toself', line=dict(color='rgba(0, 105, 148, 0.8)', width=0), name="Ocean"),
+            # Foam Tip
+            go.Scatter(x=foam_x, y=foam_y, mode='markers', marker=dict(color='white', size=10))
         ],
         name=f'f{i}'
     ))
 
-# 2. Build Figure with 30fps (33ms)
-fig_final = go.Figure(
+# Build Figure
+fig_organic = go.Figure(
     data=frames[0].data,
     layout=go.Layout(
         xaxis=dict(range=[0, 60], title="Distance (m)", showgrid=False),
         yaxis=dict(range=[0, 7], title="Elevation (m)", showgrid=False),
-        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Simulate Set", method="animate", 
-                          args=[None, {"frame": {"duration": 33, "redraw": True}, "mode": "immediate"}])])],
+        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Start Loop", method="animate", 
+                          args=[None, {"frame": {"duration": 25, "redraw": True}, "fromcurrent": True, "mode": "immediate", "loop": True}])])],
         plot_bgcolor='white'
     ),
     frames=frames
 )
 
-st.plotly_chart(fig_final, use_container_width=True)
+st.plotly_chart(fig_organic, use_container_width=True)
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
