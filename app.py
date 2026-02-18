@@ -70,6 +70,12 @@ def get_full_data():
 
 df = get_full_data()
 
+# Simple Tide Approximation (Smooth sine wave)
+    ref = datetime(2026, 2, 18, 8, 15)
+    df['hours_since_ref'] = (df['time'] - ref).dt.total_seconds() / 3600
+    # Change 1.2 to 0.7 for a smoother, less dramatic height
+    df['tide_level'] = 0.7 * np.cos(2 * np.pi * (df['hours_since_ref']) / 12.42) + 1.2
+
 # --- HELPERS ---
 def get_cardinal(degrees):
     dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
@@ -142,22 +148,42 @@ st.write("*(Scroll sideways on mobile to see the full week)*")
 
 fig = go.Figure()
 
-# 1. Tide Level (Simple Black Line on Secondary Y-Axis)
+# 1. Smooth Black Tide Line (Secondary Y-Axis)
 fig.add_trace(go.Scatter(
     x=df['time'], 
     y=df['tide_level'], 
-    name="Tide Height (m)", 
-    line=dict(color='black', width=2),
+    name="Tide Cycle", 
+    line=dict(color='black', width=1.5, shape='spline'), # 'spline' makes it a smooth curve
     yaxis="y2"
 ))
 
-# 2. Quality Line (Bold Gold Line on Primary Y-Axis)
+# 2. Quality Line (Bold Gold Line)
 fig.add_trace(go.Scatter(
     x=df['time'], 
     y=df['xi'], 
     name="Quality (ξ)", 
-    line=dict(color='#f1c40f', width=5)
+    line=dict(color='#f1c40f', width=5, shape='spline')
 ))
+
+# 3. Layout Adjustments
+fig.update_layout(
+    hovermode="x unified",
+    height=500,
+    width=1800, # Stretched for better scrolling
+    margin=dict(l=50, r=50, t=30, b=30),
+    yaxis=dict(title="Quality (ξ)", range=[0, 2]),
+    yaxis2=dict(
+        title="Tide", 
+        overlaying="y", 
+        side="right", 
+        range=[0, 5], # Setting range to 5 squashes the 1.2m tide to the bottom
+        showgrid=False
+    ),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
+
+# Add Current Time Vertical Line
+fig.add_vline(x=datetime.now(), line_width=2, line_dash="dash", line_color="red", annotation_text="NOW")
 
 # 3. Layout Adjustments for Scrolling and Dual Axis
 fig.update_layout(
