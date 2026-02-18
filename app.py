@@ -144,7 +144,75 @@ with g_col2:
     """)
 st.divider()
 
+# --- SCIENTIFIC WAVE SHOALING & IMPACT SIM ---
+st.subheader("🌀 Pakiri Ledge: Shoaling & Impact Dynamics")
 
+# 1. Physics & Resolution
+n_frames = 60 
+x_range = np.linspace(0, 60, 250) 
+y_sand = x_range * slope          
+current_tide = now_data['tide_level']
+impact_x = current_tide / slope
+h_base = now_data['swell_wave_height']
+xi = now_data['xi']
+
+frames = []
+
+for i in range(n_frames):
+    t = i / n_frames
+    
+    # --- WAVE SHOALING (Compression & Growth) ---
+    # Crest moves toward impact_x; it grows taller as water gets shallower
+    crest_x = t * impact_x
+    shoal_amp = h_base * (1 + (crest_x / impact_x) * 0.6) if crest_x < impact_x else h_base * 1.6
+    width = 18 * (1 - (crest_x / (impact_x * 1.3))) # Wavelength bunches up
+    
+    wave_body = shoal_amp * np.exp(-((x_range - crest_x)**2) / width)
+    
+    # --- BREAKING & WASH (The Tea Cup Spill) ---
+    wash_y = np.zeros_like(x_range)
+    lip_x, lip_y = [], []
+    
+    if t > 0.65: # The Breaker Phase
+        progress = (t - 0.65) / 0.35
+        # The 'Throwing Lip' white line
+        lip_throw = progress * xi * 2.5
+        lip_x = [crest_x, crest_x + lip_throw]
+        lip_y = [current_tide + wave_body.max(), current_tide + (wave_body.max() * (1 - progress))]
+        
+        if t > 0.8: # The Surge up the bank
+            surge_p = (t - 0.8) / 0.2
+            max_wash = (shoal_amp * 2.5) / slope 
+            wash_end = impact_x + (surge_p * max_wash)
+            mask = (x_range >= impact_x) & (x_range <= wash_end)
+            wash_y[mask] = 0.12 * (1 - (x_range[mask] - impact_x)/max_wash)
+
+    # FINAL WATER LAYER: Must be >= y_sand (Tea Cup Logic)
+    water_surface = np.maximum(y_sand, current_tide + wave_body + wash_y)
+
+    frames.append(go.Frame(
+        data=[
+            go.Scatter(x=x_range, y=y_sand, fill='toself', line=dict(color='#C2B280', width=2), name="Sand"),
+            go.Scatter(x=x_range, y=water_surface, fill='toself', line=dict(color='rgba(0, 105, 148, 0.7)', width=1), name="Water"),
+            go.Scatter(x=lip_x, y=lip_y, mode='lines', line=dict(color='white', width=5)) if lip_x else go.Scatter()
+        ],
+        name=f'f{i}'
+    ))
+
+# 2. Build Figure with 30fps (33ms duration)
+fig_sim = go.Figure(
+    data=frames[0].data,
+    layout=go.Layout(
+        xaxis=dict(range=[0, 60], title="Distance (m)", showgrid=False),
+        yaxis=dict(range=[0, 7], title="Elevation (m)", showgrid=False),
+        updatemenus=[dict(type="buttons", buttons=[dict(label="🌊 Simulate Set", method="animate", 
+                          args=[None, {"frame": {"duration": 33, "redraw": True}, "mode": "immediate"}])])],
+        plot_bgcolor='white'
+    ),
+    frames=frames
+)
+
+st.plotly_chart(fig_sim, use_container_width=True)
 
 # --- SCROLLABLE CHART ---
 st.divider()
