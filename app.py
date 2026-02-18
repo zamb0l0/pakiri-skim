@@ -135,18 +135,50 @@ for i, (date, row) in enumerate(daily.iterrows()):
             </div>
             """, unsafe_allow_html=True)
 
-# --- CHART WITH TIDE OVERLAY ---
+# --- SCROLLABLE CHART WITH TIDE OVERLAY ---
 st.divider()
-st.subheader("📈 Quality Trend + Tide Overlay")
+st.subheader("📈 10-Day Detail: Quality vs Tide")
+st.write("*(Scroll sideways on mobile to see the full week)*")
+
 fig = go.Figure()
 
-# Plot 1: Tide Level (Blue Fill)
-fig.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide Level (m)", fill='tozeroy', line_color='rgba(0, 100, 255, 0.2)'))
+# 1. Tide Level (Simple Black Line on Secondary Y-Axis)
+fig.add_trace(go.Scatter(
+    x=df['time'], 
+    y=df['tide_level'], 
+    name="Tide Height (m)", 
+    line=dict(color='black', width=2),
+    yaxis="y2"
+))
 
-# Plot 2: Quality Line (Gold Line)
-fig.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality (ξ)", line=dict(color='gold', width=4)))
+# 2. Quality Line (Bold Gold Line on Primary Y-Axis)
+fig.add_trace(go.Scatter(
+    x=df['time'], 
+    y=df['xi'], 
+    name="Quality (ξ)", 
+    line=dict(color='#f1c40f', width=5)
+))
 
-fig.update_layout(title="Gold Line = Ledge Quality | Blue Area = Tide Height", hovermode="x unified", height=500)
-fig.add_hline(y=1.2, line_dash="dash", annotation_text="Ledge Threshold")
+# 3. Layout Adjustments for Scrolling and Dual Axis
+fig.update_layout(
+    hovermode="x unified",
+    height=500,
+    width=1500,  # Stretching the width to make it scrollable
+    margin=dict(l=50, r=50, t=30, b=30),
+    yaxis=dict(title="Quality (ξ)", range=[0, 2]),
+    yaxis2=dict(title="Tide (m)", overlaying="y", side="right", range=[0, 3]),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
 
-st.plotly_chart(fig, use_container_width=True)
+# Ledge Threshold Line
+fig.add_hline(y=1.2, line_dash="dash", line_color="rgba(0,0,0,0.3)", annotation_text="Ledge Threshold")
+
+# Wrap in a container to enable scrolling
+st.components.v1.html(
+    f"""
+    <div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">
+        {fig.to_html(include_plotlyjs='cdn', full_html=False)}
+    </div>
+    """,
+    height=550,
+)
