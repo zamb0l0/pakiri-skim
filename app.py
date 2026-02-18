@@ -159,14 +159,17 @@ fig.update_layout(
 
 fig.add_hline(y=1.2, line_dash="dash", line_color="rgba(0,0,0,0.3)", annotation_text="Ledge Threshold")
 # Convert now to a string format Plotly handles better for vlines
-fig.add_vline(
-    x=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
-    line_width=2, 
-    line_dash="solid", 
-    line_color="red", 
-    annotation_text="NOW"
-)
-
+# Create a dedicated trace for the "NOW" line to avoid the vline error
+fig.add_trace(go.Scatter(
+    x=[datetime.now(), datetime.now()],
+    y=[0, 2],
+    mode="lines+text",
+    name="Current Time",
+    line=dict(color="red", width=2, dash="solid"),
+    text=["", "NOW"],
+    textposition="top center",
+    showlegend=False
+))
 st.components.v1.html(
     f'<div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">{fig.to_html(include_plotlyjs="cdn", full_html=False)}</div>',
     height=550,
