@@ -6,9 +6,9 @@ import plotly.graph_objects as go
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
+# --- CONFIG & STYLING ---
 st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", layout="wide")
 
-# --- CUSTOM CSS ---
 st.markdown("""
     <style>
     .card { padding: 15px; border-radius: 12px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; min-height: 270px; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
