@@ -138,71 +138,77 @@ function draw(){{
 </script>"""
 components.html(canvas_html, height=360)
 
-# --- ENHANCED: DAILY GEOMETRY (BELL CURVE) COMPARISON ---
+# --- ENHANCED: GRADIENT BELL CURVE COMPARISON ---
 st.divider()
 st.subheader("📐 Daily Beach Profile Comparison")
-st.write("Comparing daily bank steepness against the 10-day average. The steeper the curve at the water line, the better the ledge.")
+st.write("The curve color indicates **local steepness**. High-intensity colors (Red/Purple) mark the 'Ledge' zones.")
 
 df['date_label'] = df['time'].dt.strftime('%a, %b %d')
 daily_geom = df.groupby('date_label').agg({
     'xi':'max', 'tide_level':'max', 'swell_wave_height':'max', 'dynamic_slope':'max', 'time':'first'
 }).reindex(df['date_label'].unique())
 
-# Calculate Global Average for the "Faint Line"
 avg_slope = daily_geom['dynamic_slope'].mean()
-avg_tide = daily_geom['tide_level'].mean()
-
 g_cols = [st.columns(5), st.columns(5)]
-x_vals = np.linspace(0, 100, 100)
+x_vals = np.linspace(20, 100, 150) # Focused range for the berm
 
-# Bell Curve Function (Gaussian) to simulate the Berm
-def berm_curve(x, peak_height, slope_factor):
-    return peak_height * np.exp(-((x - 70)**2) / (2 * (20/slope_factor)**2))
+def get_berm_data(slope_val):
+    # Gaussian parameters
+    peak_h = 3.2
+    mu = 70 
+    # Sigma (width) is inversely proportional to slope
+    sigma = 25 / (slope_val * 15) 
+    y = peak_h * np.exp(-((x_vals - mu)**2) / (2 * sigma**2))
+    # Steepness is the absolute first derivative
+    steepness = np.abs(np.gradient(y))
+    return y, steepness
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     with g_cols[i//5][i%5]:
+        y_vals, dy = get_berm_data(row['dynamic_slope'])
+        y_avg, _ = get_berm_data(avg_slope)
+        
         fig_mini = go.Figure()
 
-        # 1. Faint Average Reference Line (The Baseline)
-        y_avg = berm_curve(x_vals, 3.0, avg_slope * 10)
+        # 1. Faint Average Reference
         fig_mini.add_trace(go.Scatter(
             x=x_vals, y=y_avg, 
-            line=dict(color='rgba(150, 150, 150, 0.3)', width=2, dash='dot'),
-            hoverinfo='none', name='Average'
+            line=dict(color='rgba(200, 200, 200, 0.2)', width=1, dash='dot'),
+            hoverinfo='none'
         ))
 
-        # 2. Daily Specific Bell Curve (The "Blatant" Change)
-        # We exaggerate the height and width based on the dynamic slope
-        y_daily = berm_curve(x_vals, 3.2, row['dynamic_slope'] * 10)
-        
+        # 2. Gradient-colored Curve
+        # We use a Scatter trace with a colorbar based on the 'dy' (steepness)
         fig_mini.add_trace(go.Scatter(
-            x=x_vals, y=y_daily, 
-            fill='tozeroy', mode='lines', 
-            fillcolor='rgba(210, 180, 140, 0.8)', 
-            line=dict(color='brown', width=3),
-            name='Daily Bank'
+            x=x_vals, y=y_vals,
+            mode='lines',
+            line=dict(
+                width=6,
+                color=dy, # Map color to steepness
+                colorscale='Inferno', # Yellow -> Orange -> Red -> Black/Purple
+                shape='spline'
+            ),
+            name='Steepness'
         ))
 
-        # 3. The Tide Line
+        # 3. Tide Line
         fig_mini.add_trace(go.Scatter(
-            x=[0, 100], y=[row['tide_level'], row['tide_level']], 
-            line=dict(color='blue', width=4), 
+            x=[20, 100], y=[row['tide_level'], row['tide_level']], 
+            line=dict(color='cyan', width=2, dash='solid'), 
             name='Tide'
         ))
         
-        # UI Formatting
+        # Calculate where the ledge is (Max steepness)
+        max_steep_idx = np.argmax(dy)
+        ledge_x = x_vals[max_steep_idx]
+        
         fig_mini.update_layout(
-            height=180, margin=dict(l=0, r=0, t=30, b=0),
-            title={'text': f"<b>{date}</b><br>ξ {row['xi']:.2f}", 'font': {'size': 14}, 'x': 0.5},
+            height=200, margin=dict(l=5, r=5, t=40, b=10),
+            title={'text': f"<b>{date}</b><br>ξ {row['xi']:.2f}", 'font': {'size': 13}, 'x': 0.5},
             xaxis=dict(visible=False), 
             yaxis=dict(range=[0, 4], visible=False),
             showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
         )
-        
-        # Vertical highlight where the tide hits the bank
-        tide_intercept = 70 # Approximate for visual impact
-        fig_mini.add_shape(type="line", x0=tide_intercept, y0=0, x1=tide_intercept, y1=row['tide_level'],
-                          line=dict(color="rgba(255,255,255,0.5)", width=1, dash="dot"))
 
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
 
