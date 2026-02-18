@@ -40,56 +40,7 @@ with st.sidebar:
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=3600)
-def get_full_data():
-# --- LIVE GAUGE SECTION ---
-# 1. Get current hour's data
-now = datetime.now()
-# Find the closest data point in our dataframe
-idx = (df['time'] - now).abs().idxmin()
-now_data = df.loc[idx]
-
-# 2. Get the current status label and color
-current_bg, current_label = get_expert_score(
-    now_data['xi'], now_data['swell_wave_height'], now_data['swell_wave_period'], 
-    now_data['swell_wave_direction'], now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level']
-)
-
-# 3. Create Gauge
-fig_gauge = go.Figure(go.Indicator(
-    mode = "gauge+number",
-    value = now_data['xi'],
-    title = {'text': f"Current Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 'font': {'size': 20}},
-    gauge = {
-        'axis': {'range': [0, 2.5], 'tickwidth': 1},
-        'bar': {'color': "black"},
-        'steps': [
-            {'range': [0, 0.8], 'color': '#ff4b4b'},    # Washed out
-            {'range': [0.8, 1.2], 'color': '#ffa500'},  # Mush
-            {'range': [1.2, 1.8], 'color': '#2ecc71'},  # Good
-            {'range': [1.8, 2.5], 'color': '#1b5e20'}], # Premium
-        'threshold': {
-            'line': {'color': "gold", 'width': 4},
-            'thickness': 0.75,
-            'value': 1.2} # Ledge Threshold
-    }
-))
-
-fig_gauge.update_layout(height=300, margin=dict(t=80, b=20, l=30, r=30))
-
-# 4. Display in two columns
-g_col1, g_col2 = st.columns([2, 1])
-with g_col1:
-    st.plotly_chart(fig_gauge, use_container_width=True)
-with g_col2:
-    st.markdown(f"""
-        ### Right Now at Pakiri
-        **Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}  
-        **Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}  
-        **Tide:** {now_data['tide_level']:.1f}m  
-        **Session:** {current_label}
-    """)
-st.divider()
-    
+def get_full_data(current_slope):
     url = "https://api.open-meteo.com/v1/forecast?latitude=-36.26&longitude=174.78&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
     m_url = "https://marine-api.open-meteo.com/v1/marine?latitude=-36.26&longitude=174.78&hourly=swell_wave_height,swell_wave_period,swell_wave_direction&forecast_days=10&timezone=auto"
     
@@ -108,7 +59,7 @@ st.divider()
     
     # DYNAMIC SLOPE: Beach is steeper at high tide
     tide_modifier = (df['tide_level'] - 1.2) / 2
-    df['dynamic_slope'] = slope * (1 + tide_modifier)
+    df['dynamic_slope'] = current_slope * (1 + tide_modifier)
     
     # Physics
     df['wavelength'] = (9.81 * (df['swell_wave_period']**2)) / (2 * np.pi)
@@ -116,7 +67,8 @@ st.divider()
     
     return df
 
-df = get_full_data()
+# Helper to define data first
+df = get_full_data(slope)
 
 # --- HELPERS ---
 def get_cardinal(degrees):
@@ -124,9 +76,7 @@ def get_cardinal(degrees):
     return dirs[int((degrees + 11.25) / 22.5) % 16]
 
 def get_arrow_with_name(deg):
-    # Get Name
     name = get_cardinal(deg)
-    # Get Arrow (Pointing TOWARDS the beach/direction of travel)
     arrows = ['↓', '↙', '←', '↖', '↑', '↗', '→', '↘']
     arrow = arrows[int((deg + 22.5) / 45) % 8]
     return f"{name} {arrow}"
@@ -145,7 +95,6 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed, tide_h):
     if 0.3 <= h <= 0.6: score += 7
     if t >= 11: score += 5
     
-    # Scoring Categories
     if t >= 13 and xi > 1.2: return "bg-blue", "🏆 DEC 8th BERM"
     if swell_dir < 45 and wind_card in ['S', 'SSW', 'SW']: return "bg-blue", "🌪️ RIVERMOUTH WRAP"
     if wind_speed > 25: return "bg-orange", "TOO WINDY"
@@ -154,6 +103,46 @@ def get_expert_score(xi, h, t, swell_dir, wind_deg, wind_speed, tide_h):
     if score > 15: return "bg-lightgreen", "GOOD"
     if score > 10: return "bg-yellow", "AVERAGE"
     return "bg-red", "WASHED OUT"
+
+# --- LIVE GAUGE SECTION ---
+now = datetime.now()
+idx = (df['time'] - now).abs().idxmin()
+now_data = df.loc[idx]
+
+current_bg, current_label = get_expert_score(
+    now_data['xi'], now_data['swell_wave_height'], now_data['swell_wave_period'], 
+    now_data['swell_wave_direction'], now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level']
+)
+
+fig_gauge = go.Figure(go.Indicator(
+    mode = "gauge+number",
+    value = now_data['xi'],
+    title = {'text': f"Current Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 'font': {'size': 20}},
+    gauge = {
+        'axis': {'range': [0, 2.5], 'tickwidth': 1},
+        'bar': {'color': "black"},
+        'steps': [
+            {'range': [0, 0.8], 'color': '#ff4b4b'},
+            {'range': [0.8, 1.2], 'color': '#ffa500'},
+            {'range': [1.2, 1.8], 'color': '#2ecc71'},
+            {'range': [1.8, 2.5], 'color': '#1b5e20'}],
+        'threshold': {'line': {'color': "gold", 'width': 4}, 'thickness': 0.75, 'value': 1.2}
+    }
+))
+fig_gauge.update_layout(height=300, margin=dict(t=80, b=20, l=30, r=30))
+
+g_col1, g_col2 = st.columns([2, 1])
+with g_col1:
+    st.plotly_chart(fig_gauge, use_container_width=True)
+with g_col2:
+    st.markdown(f"""
+        ### Right Now at Pakiri
+        **Swell:** {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s {get_arrow_with_name(now_data['swell_wave_direction'])}  
+        **Wind:** {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}  
+        **Tide:** {now_data['tide_level']:.1f}m  
+        **Session:** {current_label}
+    """)
+st.divider()
 
 # --- 10-DAY GRID ---
 st.subheader("🗓️ 10-Day Skim Forecast")
@@ -196,12 +185,12 @@ fig.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(col
 
 fig.update_layout(
     hovermode="x unified", height=500, width=1800,
-    yaxis=dict(title="Quality (ξ)", range=[0, 2]),
+    yaxis=dict(title="Quality (ξ)", range=[0, 2.5]),
     yaxis2=dict(title="Tide", overlaying="y", side="right", range=[0, 5], showgrid=False),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 
 fig.add_hline(y=1.2, line_dash="dash", line_color="rgba(0,0,0,0.3)", annotation_text="Ledge Threshold")
-fig.add_trace(go.Scatter(x=[datetime.now(), datetime.now()], y=[0, 1.9], mode="lines+text", text=["", "NOW"], textposition="bottom center", line=dict(color="red", width=2), showlegend=False))
+fig.add_trace(go.Scatter(x=[datetime.now(), datetime.now()], y=[0, 2], mode="lines+text", text=["", "NOW"], textposition="bottom center", line=dict(color="red", width=2), showlegend=False))
 
 st.components.v1.html(f'<div style="overflow-x: auto; white-space: nowrap; border-radius: 10px;">{fig.to_html(include_plotlyjs="cdn", full_html=False)}</div>', height=550)
