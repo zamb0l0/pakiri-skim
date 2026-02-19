@@ -188,7 +188,10 @@ cols = [st.columns(5), st.columns(5)]
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     # Get the data for the best hour of that day (max xi)
-    d_row = df[df['date_label'] == date].iloc[df[df['date_label'] == date]['xi'].argmax()]
+    day_data = df[df['date_label'] == date]
+    if day_data.empty: continue
+    
+    d_row = day_data.iloc[day_data['xi'].argmax()]
     
     # Get styling and drop logic
     color, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
@@ -196,7 +199,9 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
     
     # Generate the wind string (Direction + Arrow)
     wind_info = f"{d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}"
+    best_time = d_row['time'].strftime('%I:%M %p')
 
+    # THE CARD HTML
     card_html = f"""
     <div class='card {color}'>
         <div style='font-size: 0.8em; opacity: 0.8;'>{date}</div>
@@ -206,14 +211,19 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
         <div style='font-size: 0.95em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s</div>
         <div style='font-size: 0.85em; opacity: 0.9; margin-top: 2px;'>💨 {wind_info}</div>
         
+        <div class='session-time' style='background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px; margin-top: 8px; font-size: 0.8em;'>
+            Best Window: {best_time}
+        </div>
+
         <hr style='margin:10px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
         
         <div style='font-size: 1.0em;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
-        <div style='font-size: 0.75em; opacity: 0.7; margin-top: 4px;'>Peak Tide: {d_row['tide_level']:.1f}m</div>
+        <div style='font-size: 0.75em; opacity: 0.7; margin-top: 4px;'>Tide at peak: {d_row['tide_level']:.1f}m</div>
     </div>
     """
     
     with cols[i//5][i%5]:
+        # CRITICAL: This line renders the HTML
         st.markdown(card_html, unsafe_allow_html=True)
 
 # --- TREND CHART ---
