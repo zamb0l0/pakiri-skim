@@ -183,15 +183,21 @@ st.markdown(r"""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. THE 10-DAY FORECAST BLOCK
+# --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
 
+# Create 10 slots
 all_cols = st.columns(5) + st.columns(5)
 available_dates = sorted(df['date_label'].unique(), key=lambda x: datetime.strptime(x.split(', ')[1], '%b %d'))[:10]
 
+# Solid Traffic Light Colors
 traffic_light_hex = {
-    "bg-red": "#ff4b4b", "bg-orange": "#ffa500", "bg-yellow": "#f1c40f",
-    "bg-lightgreen": "#2ecc71", "bg-darkgreen": "#1b5e20", "bg-purple": "#8e44ad"
+    "bg-red": "#ff4b4b", 
+    "bg-orange": "#ffa500", 
+    "bg-yellow": "#f1c40f",
+    "bg-lightgreen": "#2ecc71", 
+    "bg-darkgreen": "#1b5e20", 
+    "bg-purple": "#8e44ad"
 }
 
 for i, date in enumerate(available_dates):
@@ -201,12 +207,12 @@ for i, date in enumerate(available_dates):
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
     
-    # Tide Direction Logic
+    # Tide Direction
     tide_arrow = "•"
     if best_hour_idx > 0:
         tide_arrow = "↑" if d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level'] else "↓"
 
-    # Color & Contrast Logic
+    # Color & Text Logic
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
@@ -216,25 +222,30 @@ for i, date in enumerate(available_dates):
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # THE HTML (FLUSH TO LEFT MARGIN)
+    # THE HTML - NO INTERNAL BOXES, JUST SOLID BACKGROUND
     card_html = f"""
-<div style="background-color: {bg_color}; color: {text_color} !important; padding: 15px; border-radius: 12px; text-align: center; min-height: 385px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 10px; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between;">
-<div style="background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px;">
-<div style="font-size: 0.95em;">🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
-<div style="font-size: 0.85em; opacity: 0.9;">💨 {wind_info}</div>
-</div>
-<div>
-<div style="font-size: 0.8em; opacity: 0.8;">{date}</div>
-<div style="font-size: 1.2em; font-weight: bold; margin: 4px 0;">{label}</div>
-</div>
-<div style="background: rgba(255,255,255,0.25); padding: 8px; border-radius: 8px; font-size: 0.9em;">
-<b>Best Window:</b> {best_time}<br>
-<b>Tide:</b> {d_row['tide_level']:.1f}m {tide_arrow}
-</div>
-<div style="background: rgba(0,0,0,0.1); padding: 8px; border-radius: 8px;">
-<div style="font-size: 0.9em; font-weight: bold; color: {'#333' if text_color=='black' else 'gold'};">{drop_emoji} {drop_m}</div>
-<div style="font-size: 1.0em; margin-top: 4px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
-</div>
+<div style="background-color: {bg_color}; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; border: 1px solid rgba(0,0,0,0.1); margin-bottom: 15px; display: flex; flex-direction: column; justify-content: space-between; font-family: sans-serif; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    
+    <div>
+        <div style="font-size: 0.85em; opacity: 0.8; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">{date}</div>
+        <div style="font-size: 1.5em; font-weight: 900; margin: 10px 0;">{label}</div>
+    </div>
+
+    <div style="border-top: 1px solid rgba({ '0,0,0,0.1' if text_color=='black' else '255,255,255,0.3' }); border-bottom: 1px solid rgba({ '0,0,0,0.1' if text_color=='black' else '255,255,255,0.3' }); padding: 15px 0; margin: 10px 0;">
+        <div style="font-size: 1.0em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
+        <div style="font-size: 0.9em; opacity: 0.9; margin-top: 5px;">{swell_dir} | 💨 {wind_info}</div>
+    </div>
+
+    <div>
+        <div style="font-size: 0.95em; margin-bottom: 5px;"><b>Best:</b> {best_time}</div>
+        <div style="font-size: 1.1em; font-weight: bold;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+    </div>
+
+    <div style="margin-top: 15px;">
+        <div style="font-size: 0.95em; font-weight: bold;">{drop_emoji} {drop_m}</div>
+        <div style="font-size: 1.1em; margin-top: 5px; opacity: 0.9;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+    </div>
+
 </div>"""
 
     with all_cols[i]:
