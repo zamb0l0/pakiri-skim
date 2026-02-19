@@ -17,15 +17,30 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    /* 1. Target only the Streamlit wrapper, not our custom cards */
-    [data-testid="stMarkdownContainer"] > div:not(.skim-card) { 
-        background-color: transparent !important; 
-        border: none !important; 
+    /* 1. Force the Streamlit wrapper to be transparent so our colors show through */
+    [data-testid="stMarkdownContainer"] {
+        background-color: transparent !important;
     }
-    /* 2. Hide the raw code if it leaks */
-    code { display: none !important; }
-    /* 3. Force the container to allow full color */
-    .stMarkdown { background: none !important; }
+
+    /* 2. Remove borders and padding Streamlit adds to its own internal divs */
+    div[data-testid="stMarkdownContainer"] > div {
+        background-color: transparent !important;
+        border: none !important;
+    }
+
+    /* 3. This is the 'Shield': Hide the raw code text if Streamlit glitches */
+    code { 
+        display: none !important; 
+    }
+
+    /* 4. Optional: Smooth transition for when the data updates */
+    .skim-card {
+        transition: transform 0.2s ease-in-out;
+    }
+    .skim-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3) !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -183,8 +198,27 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 # 1. THE SHIELD (Place this once near the top of your script)
 st.markdown(r"""
     <style>
-    /* This stops Streamlit from wrapping your HTML in a code-block box */
-    .stMarkdown div { background-color: transparent !important; border: none !important; }
+    /* 1. Remove Streamlit's default gray/white boxes around the markdown */
+    [data-testid="stMarkdownContainer"] {
+        background-color: transparent !important;
+    }
+    .stMarkdown {
+        background-color: transparent !important;
+    }
+    
+    /* 2. Target the specific div that Streamlit uses to wrap HTML and make it transparent */
+    div[data-testid="stMarkdownContainer"] > div {
+        background-color: transparent !important;
+        border: none !important;
+    }
+
+    /* 3. Ensure OUR card ignores the transparency above */
+    .skim-card {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
     code { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -207,17 +241,17 @@ for i, date in enumerate(available_dates):
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
     
-    if best_hour_idx > 0:
-        tide_arrow = "↑" if d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level'] else "↓"
-    else: tide_arrow = "•"
+    # Tide Direction
+    tide_arrow = "↑" if (best_hour_idx > 0 and d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level']) else "↓"
 
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
     line_color = "rgba(0,0,0,0.1)" if text_color == "black" else "rgba(255,255,255,0.3)"
 
-    card_html = f"""<div class="skim-card" style="background-color: {bg_color} !important; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; display: flex; flex-direction: column; justify-content: space-between; font-family: sans-serif; border: 1px solid rgba(0,0,0,0.1);">
-<div><div style="font-size: 0.8em; opacity: 0.8; font-weight: bold;">{date}</div>
+    # Using a style-heavy 'section' tag to force the background-color
+    card_html = f"""<section class="skim-card" style="background-color: {bg_color} !important; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; display: flex; flex-direction: column; justify-content: space-between; font-family: sans-serif; border: 2px solid rgba(255,255,255,0.1); box-shadow: 2px 2px 10px rgba(0,0,0,0.2);">
+<div><div style="font-size: 0.85em; opacity: 0.8; font-weight: bold;">{date}</div>
 <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0;">{label}</div></div>
 <div style="border-top: 1px solid {line_color}; border-bottom: 1px solid {line_color}; padding: 12px 0; margin: 10px 0;">
 <div style="font-size: 1.0em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
@@ -226,7 +260,7 @@ for i, date in enumerate(available_dates):
 <div style="font-size: 1.1em; font-weight: bold; margin-top: 2px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div></div>
 <div style="margin-top: 10px;"><div style="font-size: 0.95em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
 <div style="font-size: 1.0em; margin-top: 4px; opacity: 0.9;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div></div>
-</div>"""
+</section>"""
 
     with all_cols[i]:
         st.markdown(card_html, unsafe_allow_html=True)
