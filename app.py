@@ -192,18 +192,25 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
         st.markdown(f"<div style='text-align:center; font-size:10px; color:#95a5a6; font-style:italic;'>{drop_desc}</div>", unsafe_allow_html=True)
 
-# 1. THE SHIELD (Place this once near the top of your script)
+# --- SIMPLIFIED STYLING (STOPS THE BLEACHING) ---
 st.markdown(r"""
     <style>
-    /* Clean up the card container */
-    div[data-testid="stMarkdownContainer"] {
-        background-color: transparent !important;
-    }
-    /* Hide raw code snippets */
+    /* Stop Streamlit from adding gray boxes but don't force transparency on our HTML */
+    [data-testid="stMarkdownContainer"] { background-color: transparent !important; }
+    div[data-testid="stMarkdownContainer"] > div { border: none !important; }
     code { display: none !important; }
-    /* Ensure cards align properly */
-    .stColumn {
-        padding: 5px !important;
+    
+    /* Ensure the cards look uniform */
+    .skim-card-container {
+        border: 1px solid rgba(128,128,128,0.2);
+        border-radius: 15px;
+        overflow: hidden;
+        text-align: center;
+        min-height: 400px;
+        display: flex;
+        flex-direction: column;
+        background-color: rgba(128,128,128,0.05);
+        font-family: sans-serif;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -232,29 +239,29 @@ for i, date in enumerate(available_dates):
     bg_color = traffic_light_hex.get(color_class, "#333333")
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
 
+    # THE HTML: COLOR IS NOW IN THE TOP BAR ONLY
     card_html = f"""
-<div style="border: 1px solid rgba(128,128,128,0.2); border-radius: 15px; overflow: hidden; text-align: center; min-height: 380px; font-family: sans-serif; background: rgba(128,128,128,0.05);">
-    <div style="background-color: {bg_color} !important; color: {text_color} !important; padding: 10px; font-weight: 900; font-size: 1.2em; border-bottom: 2px solid rgba(0,0,0,0.1);">
+<div class="skim-card-container">
+    <div style="background-color: {bg_color} !important; color: {text_color} !important; padding: 12px; font-weight: 900; font-size: 1.2em; border-bottom: 2px solid rgba(0,0,0,0.1);">
         {label}
     </div>
     
-    <div style="padding: 10px; font-size: 0.85em; opacity: 0.7; font-weight: bold;">
-        {date}
-    </div>
+    <div style="padding: 10px; font-size: 0.8em; opacity: 0.7; font-weight: bold;">{date}</div>
 
-    <div style="padding: 10px; border-top: 1px solid rgba(128,128,128,0.1); border-bottom: 1px solid rgba(128,128,128,0.1); margin: 5px 10px;">
-        <div style="font-size: 1.1em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
+    <div style="padding: 10px; border-top: 1px solid rgba(128,128,128,0.1); border-bottom: 1px solid rgba(128,128,128,0.1); margin: 0 10px;">
+        <div style="font-size: 1.0em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
         <div style="font-size: 0.8em; margin-top: 4px;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
     </div>
 
-    <div style="padding: 10px;">
-        <div style="font-size: 0.9em;"><b>Best:</b> {d_row['time'].strftime('%I:%M %p')}</div>
-        <div style="font-size: 1.1em; font-weight: bold; margin-top: 2px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+    <div style="padding: 15px 10px; flex-grow: 1;">
+        <div style="font-size: 0.9em;"><b>Best Window:</b></div>
+        <div style="font-size: 1.0em;">{d_row['time'].strftime('%I:%M %p')}</div>
+        <div style="font-size: 1.1em; font-weight: bold; margin-top: 5px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
     </div>
 
-    <div style="padding: 10px; background: rgba(128,128,128,0.1); margin-top: auto;">
+    <div style="padding: 10px; background: rgba(0,0,0,0.05);">
         <div style="font-size: 0.9em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
-        <div style="font-size: 1.0em; margin-top: 2px; opacity: 0.8;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+        <div style="font-size: 0.9em; margin-top: 2px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
     </div>
 </div>"""
 
