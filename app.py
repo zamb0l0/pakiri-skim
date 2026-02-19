@@ -146,28 +146,25 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # UPDATED COORDINATES FOR SKIM PAKIRI LEDGE
-    LAT, LON = -36.236222, 174.718222  # From 36°14'10.4"S 174°43'05.6"E
+    # Coordinate for the specific pin provided
+    LAT, LON = -36.236222, 174.718222
 
-    # Define vector lengths
-    swell_len = 0.005 
-    wind_len = 0.004
+    # Vector lengths for visual clarity
+    swell_len = 0.006 
+    wind_len = 0.005
 
     fig_map = go.Figure()
 
-    # 1. Predicted Contour Line (Orange) - Oriented to the specific ledge location
+    # 1. Predicted Contour Line (Orange) - Tracking the ledge at the pin
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
-        # Adjusted these points to trace the shoreline near your specific pin
-        lon = [174.715, 174.718, 174.722],
-        lat = [-36.233, -36.236, -36.240],
+        lon = [174.715, 174.718, 174.722, 174.726],
+        lat = [-36.233, -36.236, -36.239, -36.242],
         line = dict(width=4, color='#e67e22'),
-        name = "Predicted Ledge",
-        hoverinfo='text',
-        text="Predicted Ledge Break"
+        name = "Ledge Contour"
     ))
 
-    # 2. Swell Direction Vector (Blue)
+    # 2. Swell Direction Vector (Blue) - Pointing towards the beach
     s_dx = swell_len * np.sin(np.radians(now_data['swell_wave_direction']))
     s_dy = swell_len * np.cos(np.radians(now_data['swell_wave_direction']))
     fig_map.add_trace(go.Scattermapbox(
@@ -176,7 +173,7 @@ with g_col2:
         lat = [LAT + s_dy, LAT],
         marker = dict(size=12, symbol="triangle", color="#3498db"),
         line = dict(width=6, color="#3498db"),
-        name = "Swell Dir"
+        name = "Swell"
     ))
 
     # 3. Wind Direction Vector (Yellow)
@@ -188,23 +185,21 @@ with g_col2:
         lat = [LAT + w_dy, LAT],
         marker = dict(size=10, symbol="circle", color="#f1c40f"),
         line = dict(width=4, color="#f1c40f"),
-        name = "Wind Dir"
+        name = "Wind"
     ))
 
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0},
         height = 450,
         mapbox = {
-            # Use 'satellite' for the ESRI-style high-res look
-            # Note: This requires a Mapbox token for high-res; 
-            # otherwise, 'satellite-streets' or 'open-street-map' is used.
-            'style': "satellite-streets", 
+            'style': "satellite", 
             'center': {'lon': LON, 'lat': LAT},
-            'zoom': 15}, # Zoomed in closer for specific ledge detail
+            'zoom': 15}, 
         showlegend = False
     )
     
-    st.plotly_chart(fig_map, use_container_width=True)N
+    # Error fixed here (removed the stray 'N')
+    st.plotly_chart(fig_map, use_container_width=True)
 
 # --- VISUALS: DAILY PROFILE COMPARISON ---
 def get_extreme_profile(slope_val, xi_val):
