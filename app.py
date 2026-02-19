@@ -190,43 +190,47 @@ for i, date in enumerate(available_dates):
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     
-    # Adaptive text color for the whole card
-    text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
-    muted_text = "rgba(0,0,0,0.6)" if text_color == "black" else "rgba(255,255,255,0.7)"
-
+    # Text color logic
+    header_text = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
+    body_text = "#2d3436" # Keep body text dark for readability on pastel
+    
     swell_deg = d_row['swell_wave_direction']
     paper_plane = f"➤" 
     swell_cardinal = get_cardinal(swell_deg)
     wind_cardinal = get_cardinal(d_row['wind_dir'])
 
-    # THE VERTICAL STACKED HTML
+    # THE PASTEL REJIG: Left-aligned for safety
     card_html = f"""
-<div style="background-color: {bg_color}; color: {text_color}; font-family: sans-serif; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center; min-height: 380px; display: flex; flex-direction: column; justify-content: space-between;">
-<div>
-<div style="font-weight: 900; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.8;">{date}</div>
-<div style="font-weight: 900; font-size: 1.2rem; text-transform: uppercase; margin-bottom: 15px; border-bottom: 1px solid {muted_text}; padding-bottom: 5px;">{label}</div>
+<div style="font-family: sans-serif; margin-bottom: 25px; border-radius: 12px; overflow: hidden; border: 1px solid rgba(0,0,0,0.1); min-height: 420px; display: flex; flex-direction: column;">
+<div style="background-color: {bg_color}; color: {header_text}; padding: 12px; text-align: center;">
+<div style="font-weight: 900; font-size: 0.75rem; text-transform: uppercase; opacity: 0.8; margin-bottom: 2px;">{date}</div>
+<div style="font-weight: 900; font-size: 1.2rem; text-transform: uppercase;">{label}</div>
+</div>
 
+<div style="background-color: {bg_color}99; color: {body_text}; padding: 15px; flex-grow: 1; text-align: center; display: flex; flex-direction: column; justify-content: space-between;">
+<div>
 <div style="margin-bottom: 15px;">
 <div style="font-size: 1.5rem; font-weight: 900;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
-<div style="font-size: 0.9rem; font-weight: 700;">{swell_cardinal} <span style="display:inline-block; transform: rotate({swell_deg}deg);">{paper_plane}</span></div>
+<div style="font-size: 0.95rem; font-weight: 700;">{swell_cardinal} <span style="display:inline-block; transform: rotate({swell_deg}deg);">{paper_plane}</span></div>
 </div>
 
 <div style="margin-bottom: 15px;">
-<div style="font-size: 0.7rem; font-weight: 900; text-transform: uppercase; opacity: 0.7;">Wind</div>
+<div style="font-size: 0.65rem; font-weight: 900; text-transform: uppercase; opacity: 0.6;">Wind</div>
 <div style="font-size: 1.1rem; font-weight: 900;">💨 {d_row['wind_speed']:.0f}km/h</div>
-<div style="font-size: 0.9rem; font-weight: 700;">{wind_cardinal} {get_arrow_with_name(d_row['wind_dir']).split(' ')[1]}</div>
+<div style="font-size: 0.95rem; font-weight: 700;">{wind_cardinal} {get_arrow_with_name(d_row['wind_dir']).split(' ')[1]}</div>
 </div>
 
-<div style="background: rgba(0,0,0,0.1); padding: 10px; border-radius: 8px;">
+<div style="background: rgba(255,255,255,0.3); padding: 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05);">
 <div style="font-size: 1.2rem; font-weight: 900;">{d_row['tide_level']:.1f}m {tide_arrow}</div>
-<div style="font-size: 1rem; font-weight: 900;">{d_row['time'].strftime('%I:%M %p')}</div>
+<div style="font-size: 1.0rem; font-weight: 900;">{d_row['time'].strftime('%I:%M %p')}</div>
 </div>
 </div>
 
-<div style="margin-top: 15px;">
-<div style="font-weight: 900; font-size: 0.9rem; text-transform: uppercase;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]}</div>
-<div style="font-size: 0.7rem; font-family: monospace; font-weight: bold; opacity: 0.8;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
-<div style="font-size: 0.7rem; font-family: monospace; opacity: 0.6;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+<div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
+<div style="font-weight: 900; font-size: 1.1rem; text-transform: uppercase; margin-bottom: 4px;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]}</div>
+<div style="font-size: 0.95rem; font-weight: 800; opacity: 0.9;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
+<div style="font-size: 0.85rem; font-family: monospace; font-weight: 900; margin-top: 5px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+</div>
 </div>
 </div>
 """
