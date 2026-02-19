@@ -17,15 +17,16 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    .card { padding: 12px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 280px; border: 1px solid rgba(255,255,255,0.1); }
-    .bg-red { background-color: #ff4b4b; }
-    .bg-orange { background-color: #ffa500; }
-    .bg-yellow { background-color: #f1c40f; color: black !important; }
-    .bg-lightgreen { background-color: #2ecc71; color: black !important; }
-    .bg-darkgreen { background-color: #1b5e20; border: 2px solid gold; }
-    .bg-purple { background-color: #8e44ad; border: 2px solid #ff00ff; }
+    .card { padding: 12px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 310px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; justify-content: space-between; }
     
-    /* CRITICAL FIX: Stops Streamlit from adding a gray/white box background */
+    /* Traffic Light System */
+    .bg-red { background-color: #ff4b4b !important; }
+    .bg-orange { background-color: #ffa500 !important; }
+    .bg-yellow { background-color: #f1c40f !important; color: black !important; }
+    .bg-lightgreen { background-color: #2ecc71 !important; color: black !important; }
+    .bg-darkgreen { background-color: #1b5e20 !important; border: 2px solid gold; }
+    .bg-purple { background-color: #8e44ad !important; border: 2px solid #ff00ff; }
+    
     .stMarkdown div { background-color: transparent !important; border: none !important; }
     code { display: none !important; } 
     </style>
@@ -186,15 +187,21 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 
 # --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
-cols = [st.columns(5), st.columns(5)]
 
-for i, (date, row) in enumerate(daily_geom.iterrows()):
+# Create a flat list of 10 columns to avoid index skipping
+all_cols = st.columns(5) + st.columns(5)
+
+# Sort daily_geom by date to ensure chronological order
+for i, (date, row) in enumerate(daily_geom.sort_index().iterrows()):
+    if i >= 10: break  # Safety cap
+    
     day_data = df[df['date_label'] == date]
     if day_data.empty: continue
     
-    # Hour with peak ledge quality
+    # Best hour based on Ledge Quality
     d_row = day_data.iloc[day_data['xi'].argmax()]
     
+    # Restored Traffic Light Logic via get_expert_score
     color, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     drop_m, _, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
     
@@ -202,25 +209,24 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # ZERO INDENTATION HTML BLOCK
     card_html = f"""
 <div class='card {color}'>
-<div style='background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px; margin-bottom: 8px;'>
+<div style='background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px; min-height: 75px;'>
 <div style='font-size: 0.95em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
 <div style='font-size: 0.85em; opacity: 0.9; margin-top: 4px;'>💨 {wind_info}</div>
 </div>
-<div style='margin-bottom: 8px;'>
-<div style='font-size: 0.75em; opacity: 0.8;'>{date}</div>
+<div style='margin: 8px 0;'>
+<div style='font-size: 0.75em; opacity: 0.9;'>{date}</div>
 <div style='font-size: 1.1em; margin: 2px 0;'><strong>{label}</strong></div>
-<div style='font-size: 0.8em; opacity: 0.9;'>Best: {best_time} ({d_row['tide_level']:.1f}m Tide)</div>
+<div style='font-size: 0.8em;'>Best: {best_time} ({d_row['tide_level']:.1f}m)</div>
 </div>
-<div style='background: rgba(255,255,255,0.2); padding: 8px; border-radius: 8px;'>
+<div style='background: rgba(255,255,255,0.2); padding: 8px; border-radius: 8px; min-height: 70px;'>
 <div style='font-size: 0.85em; color: #f1c40f; font-weight: bold;'>{drop_m}</div>
 <div style='font-size: 1.0em; margin-top: 4px;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
 </div>
 </div>"""
 
-    with cols[i//5][i%5]:
+    with all_cols[i]:
         st.markdown(card_html, unsafe_allow_html=True)
 
 # --- TREND CHART ---
