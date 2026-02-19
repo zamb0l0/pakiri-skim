@@ -18,8 +18,16 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 st.markdown(r"""
     <style>
     .card { padding: 12px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 280px; border: 1px solid rgba(255,255,255,0.1); }
-    /* This line is the magic fix for "Code Box" backgrounds */
+    .bg-red { background-color: #ff4b4b; }
+    .bg-orange { background-color: #ffa500; }
+    .bg-yellow { background-color: #f1c40f; color: black !important; }
+    .bg-lightgreen { background-color: #2ecc71; color: black !important; }
+    .bg-darkgreen { background-color: #1b5e20; border: 2px solid gold; }
+    .bg-purple { background-color: #8e44ad; border: 2px solid #ff00ff; }
+    
+    /* CRITICAL FIX: Stops Streamlit from adding a gray/white box background */
     .stMarkdown div { background-color: transparent !important; border: none !important; }
+    code { display: none !important; } 
     </style>
     """, unsafe_allow_html=True)
 
@@ -184,16 +192,17 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
     day_data = df[df['date_label'] == date]
     if day_data.empty: continue
     
+    # Hour with peak ledge quality
     d_row = day_data.iloc[day_data['xi'].argmax()]
+    
     color, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     drop_m, _, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
     
-    # Metadata
     wind_info = f"{d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}"
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # THE HTML STRING (MUST HAVE ZERO LEADING SPACES)
+    # ZERO INDENTATION HTML BLOCK
     card_html = f"""
 <div class='card {color}'>
 <div style='background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px; margin-bottom: 8px;'>
