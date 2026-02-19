@@ -195,28 +195,16 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 # 1. THE SHIELD (Place this once near the top of your script)
 st.markdown(r"""
     <style>
-    /* 1. Remove Streamlit's default gray/white boxes around the markdown */
-    [data-testid="stMarkdownContainer"] {
+    /* Clean up the card container */
+    div[data-testid="stMarkdownContainer"] {
         background-color: transparent !important;
     }
-    .stMarkdown {
-        background-color: transparent !important;
-    }
-    
-    /* 2. Target the specific div that Streamlit uses to wrap HTML and make it transparent */
-    div[data-testid="stMarkdownContainer"] > div {
-        background-color: transparent !important;
-        border: none !important;
-    }
-
-    /* 3. Ensure OUR card ignores the transparency above */
-    .skim-card {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
-    
+    /* Hide raw code snippets */
     code { display: none !important; }
+    /* Ensure cards align properly */
+    .stColumn {
+        padding: 5px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -238,32 +226,35 @@ for i, date in enumerate(available_dates):
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
     
-    # Tide Direction
     tide_arrow = "↑" if (best_hour_idx > 0 and d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level']) else "↓"
 
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
-    line_color = "rgba(0,0,0,0.1)" if text_color == "black" else "rgba(255,255,255,0.3)"
 
-    # WE ARE USING !important ON EVERY COLOR ATTRIBUTE TO FORCE THE PAINT
     card_html = f"""
-<div class="skim-card" style="background: {bg_color} !important; background-color: {bg_color} !important; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; border: 1px solid rgba(0,0,0,0.1); box-shadow: 2px 2px 8px rgba(0,0,0,0.2); font-family: sans-serif;">
-    <div>
-        <div style="font-size: 0.85em; opacity: 0.8; font-weight: bold; color: {text_color} !important;">{date}</div>
-        <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0; color: {text_color} !important;">{label}</div>
+<div style="border: 1px solid rgba(128,128,128,0.2); border-radius: 15px; overflow: hidden; text-align: center; min-height: 380px; font-family: sans-serif; background: rgba(128,128,128,0.05);">
+    <div style="background-color: {bg_color} !important; color: {text_color} !important; padding: 10px; font-weight: 900; font-size: 1.2em; border-bottom: 2px solid rgba(0,0,0,0.1);">
+        {label}
     </div>
-    <div style="border-top: 1px solid {line_color}; border-bottom: 1px solid {line_color}; padding: 12px 0; margin: 10px 0;">
-        <div style="font-size: 1.0em; font-weight: bold; color: {text_color} !important;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
-        <div style="font-size: 0.85em; opacity: 0.9; margin-top: 4px; color: {text_color} !important;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
+    
+    <div style="padding: 10px; font-size: 0.85em; opacity: 0.7; font-weight: bold;">
+        {date}
     </div>
-    <div style="margin-bottom: 10px;">
-        <div style="font-size: 0.9em; color: {text_color} !important;"><b>Best:</b> {d_row['time'].strftime('%I:%M %p')}</div>
-        <div style="font-size: 1.1em; font-weight: bold; margin-top: 2px; color: {text_color} !important;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+
+    <div style="padding: 10px; border-top: 1px solid rgba(128,128,128,0.1); border-bottom: 1px solid rgba(128,128,128,0.1); margin: 5px 10px;">
+        <div style="font-size: 1.1em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
+        <div style="font-size: 0.8em; margin-top: 4px;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
     </div>
-    <div style="background: rgba(0,0,0,0.1); padding: 10px; border-radius: 10px;">
-        <div style="font-size: 0.95em; font-weight: bold; color: {text_color} !important;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
-        <div style="font-size: 1.0em; margin-top: 4px; opacity: 0.9; color: {text_color} !important;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+
+    <div style="padding: 10px;">
+        <div style="font-size: 0.9em;"><b>Best:</b> {d_row['time'].strftime('%I:%M %p')}</div>
+        <div style="font-size: 1.1em; font-weight: bold; margin-top: 2px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+    </div>
+
+    <div style="padding: 10px; background: rgba(128,128,128,0.1); margin-top: auto;">
+        <div style="font-size: 0.9em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
+        <div style="font-size: 1.0em; margin-top: 2px; opacity: 0.8;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
     </div>
 </div>"""
 
