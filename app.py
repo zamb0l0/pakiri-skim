@@ -17,7 +17,7 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    .card { padding: 12px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 310px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; justify-content: space-between; }
+    .card { padding: 10px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 350px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 6px; }
     
     /* Traffic Light System */
     .bg-red { background-color: #ff4b4b !important; }
@@ -27,12 +27,11 @@ st.markdown(r"""
     .bg-darkgreen { background-color: #1b5e20 !important; border: 2px solid gold; }
     .bg-purple { background-color: #8e44ad !important; border: 2px solid #ff00ff; }
     
+    /* Force Render - No Code Blocks */
     .stMarkdown div { background-color: transparent !important; border: none !important; }
     code { display: none !important; } 
     </style>
     """, unsafe_allow_html=True)
-
-st.title("Pakiri Ledge Command Center")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -188,20 +187,23 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 # --- 10-DAY FORECAST CARDS ---
 st.subheader("🗓️ 10-Day Skim Forecast")
 
-# Create a flat list of 10 columns to avoid index skipping
+# Force 10 slots
 all_cols = st.columns(5) + st.columns(5)
+date_list = daily_geom.index.tolist()
 
-# Sort daily_geom by date to ensure chronological order
-for i, (date, row) in enumerate(daily_geom.sort_index().iterrows()):
-    if i >= 10: break  # Safety cap
-    
+for i in range(10):
+    if i >= len(date_list): break
+    date = date_list[i]
     day_data = df[df['date_label'] == date]
     if day_data.empty: continue
     
-    # Best hour based on Ledge Quality
     d_row = day_data.iloc[day_data['xi'].argmax()]
     
-    # Restored Traffic Light Logic via get_expert_score
+    # Calculate Tide Trend (is it rising or falling?)
+    # Compare current hour tide to the previous hour
+    current_idx = d_row.name
+    tide_arrow = "↑" if df.loc[current_idx, 'tide_level'] > df.loc[current_idx-1, 'tide_level'] else "↓"
+
     color, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     drop_m, _, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
     
@@ -209,20 +211,24 @@ for i, (date, row) in enumerate(daily_geom.sort_index().iterrows()):
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
+    # THE HTML - NO INDENTATION ALLOWED
     card_html = f"""
 <div class='card {color}'>
-<div style='background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px; min-height: 75px;'>
-<div style='font-size: 0.95em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
-<div style='font-size: 0.85em; opacity: 0.9; margin-top: 4px;'>💨 {wind_info}</div>
+<div style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 6px;'>
+<div style='font-size: 0.9em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
+<div style='font-size: 0.8em; opacity: 0.9;'>💨 {wind_info}</div>
 </div>
-<div style='margin: 8px 0;'>
-<div style='font-size: 0.75em; opacity: 0.9;'>{date}</div>
-<div style='font-size: 1.1em; margin: 2px 0;'><strong>{label}</strong></div>
-<div style='font-size: 0.8em;'>Best: {best_time} ({d_row['tide_level']:.1f}m)</div>
+<div style='margin: 4px 0;'>
+<div style='font-size: 0.7em; opacity: 0.9;'>{date}</div>
+<div style='font-size: 1.1em;'><b>{label}</b></div>
 </div>
-<div style='background: rgba(255,255,255,0.2); padding: 8px; border-radius: 8px; min-height: 70px;'>
-<div style='font-size: 0.85em; color: #f1c40f; font-weight: bold;'>{drop_m}</div>
-<div style='font-size: 1.0em; margin-top: 4px;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+<div style='background: rgba(255,255,255,0.15); padding: 5px; border-radius: 6px; font-size: 0.85em;'>
+<b>Time:</b> {best_time}<br>
+<b>Tide:</b> {d_row['tide_level']:.1f}m {tide_arrow}
+</div>
+<div style='background: rgba(255,255,255,0.25); padding: 5px; border-radius: 6px;'>
+<div style='font-size: 0.8em; color: #f1c40f; font-weight: bold;'>{drop_m}</div>
+<div style='font-size: 0.95em; margin-top: 2px;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
 </div>
 </div>"""
 
