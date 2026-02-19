@@ -213,34 +213,39 @@ for i, date in enumerate(available_dates):
     # Get Score & Colors
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
-    text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
+    
+    # Text color for the Header bar (Dark backgrounds need white text)
+    header_text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
 
-    # --- THE HTML: SEPARATED HEADER (COLOR) AND BODY (WHITE/GRAY) ---
+    # --- THE HTML: DATA RESTORED ---
     card_html = f"""
-    <div style="border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; overflow: hidden; font-family: sans-serif; margin-bottom: 10px;">
-        <div style="background-color: {bg_color}; color: {text_color}; padding: 12px; text-align: center; font-weight: 900; font-size: 1.1em;">
+    <div style="border: 1px solid rgba(128,128,128,0.3); border-radius: 12px; overflow: hidden; font-family: sans-serif; margin-bottom: 15px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1);">
+        <div style="background-color: {bg_color} !important; color: {header_text_color} !important; padding: 12px; text-align: center; font-weight: 900; font-size: 1.1em; text-transform: uppercase; letter-spacing: 1px;">
             {label}
         </div>
         
-        <div style="padding: 15px; text-align: center; background-color: rgba(128,128,128,0.05);">
-            <div style="font-size: 0.85em; opacity: 0.7; font-weight: bold; margin-bottom: 5px;">{date}</div>
-            
-            <div style="font-size: 1.0em; font-weight: bold; margin: 10px 0;">
-                🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s
-            </div>
-            
-            <div style="font-size: 0.85em; opacity: 0.9;">
-                 💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}
-            </div>
-
-            <div style="border-top: 1px solid rgba(128,128,128,0.1); margin: 10px 0; padding-top: 10px;">
-                <div style="font-size: 0.9em;"><b>Best:</b> {d_row['time'].strftime('%I:%M %p')}</div>
-                <div style="font-size: 1.0em; font-weight: bold;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+        <div style="padding: 15px; text-align: center; background-color: white; color: #1e1e1e; min-height: 250px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+                <div style="font-size: 0.9em; color: #666; font-weight: bold; margin-bottom: 8px;">{date}</div>
+                
+                <div style="font-size: 1.2em; font-weight: 800; color: #000; margin: 5px 0;">
+                    🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s
+                </div>
+                
+                <div style="font-size: 0.9em; color: #444; margin-bottom: 12px;">
+                     {get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}
+                </div>
             </div>
 
-             <div style="margin-top: 10px;">
-                <div style="font-size: 0.9em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]}</div>
-                <div style="font-size: 0.8em; opacity: 0.8;">ξ {d_row['xi']:.2f}</div>
+            <div style="border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 10px 0; margin: 10px 0;">
+                <div style="font-size: 0.85em; color: #666;">BEST WINDOW</div>
+                <div style="font-size: 1.0em; font-weight: bold; color: #1e1e1e;">{d_row['time'].strftime('%I:%M %p')}</div>
+                <div style="font-size: 1.1em; font-weight: 800; color: #2c3e50; margin-top: 4px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+            </div>
+
+             <div>
+                <div style="font-size: 0.95em; font-weight: 900; color: #2ecc71;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
+                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
             </div>
         </div>
     </div>
