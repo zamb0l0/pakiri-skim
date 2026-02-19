@@ -187,30 +187,45 @@ for i, date in enumerate(available_dates):
     d_row = df.loc[best_hour_idx]
     tide_arrow = "↑" if (best_hour_idx > 0 and d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level']) else "↓"
 
+    # Expert Score & Colors
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     header_text = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
 
-    # THE FIX: No indentation inside this string! 
-    # This prevents the Markdown engine from seeing 'code'
+    # Swell Plane Logic (Paper Plane style arrow)
+    swell_deg = d_row['swell_wave_direction']
+    plane_dir = ['⬇', '↙', '⬅', '↖', '⬆', '↗', '➡', '↘'][int((swell_deg + 22.5) / 45) % 8]
+    # Using the heavy pointer '➤' for that paper plane look
+    paper_plane = f"➤" 
+    swell_cardinal = get_cardinal(swell_deg)
+
     card_html = f"""
-<div style="background-color: white; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; font-family: sans-serif; min-height: 380px; margin-bottom: 20px;">
+<div style="background-color: white; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; font-family: sans-serif; min-height: 400px; margin-bottom: 20px;">
 <div style="background-color: {bg_color}; color: {header_text}; padding: 12px; text-align: center; font-weight: bold; font-size: 1.1rem; border-bottom: 1px solid rgba(0,0,0,0.1);">
 {label}
 </div>
 <div style="padding: 15px; color: black; text-align: center;">
-<div style="font-weight: bold; color: #666; font-size: 0.85rem; margin-bottom: 10px;">{date}</div>
-<div style="font-size: 1.2rem; font-weight: 800; margin-bottom: 5px;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
-<div style="font-size: 0.85rem; color: #444;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
-<div style="background: #f1f3f5; padding: 12px; border-radius: 8px; margin: 15px 0; border: 1px solid #e9ecef;">
-<div style="font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px;">Best Window</div>
-<div style="font-size: 1.1rem; font-weight: bold; color: #212529;">{d_row['time'].strftime('%I:%M %p')}</div>
-<div style="font-size: 1.0rem; font-weight: 700; color: #495057;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+<div style="font-weight: bold; color: #666; font-size: 0.85rem; margin-bottom: 8px;">{date}</div>
+
+<div style="margin-bottom: 10px;">
+<div style="font-size: 1.3rem; font-weight: 800; color: #000;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
+<div style="font-size: 0.9rem; color: #333; font-weight: 600;">{swell_cardinal} <span style="display:inline-block; transform: rotate({swell_deg}deg);">{paper_plane}</span></div>
 </div>
-<div style="font-weight: 800; color: #2ecc71; font-size: 0.95rem; margin-top: 10px;">
+
+<div style="font-size: 0.85rem; color: #555; border-top: 1px solid #eee; padding-top: 8px;">
+💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}
+</div>
+
+<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin: 12px 0; border: 1px solid #e9ecef;">
+<div style="font-size: 0.7rem; color: #6c757d; text-transform: uppercase; font-weight: bold;">Best Window</div>
+<div style="font-size: 1.1rem; font-weight: bold; color: #212529;">{d_row['time'].strftime('%I:%M %p')}</div>
+<div style="font-size: 1.0rem; font-weight: 700; color: #2c3e50;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+</div>
+
+<div style="font-weight: 800; color: #2ecc71; font-size: 0.95rem; margin-top: 8px;">
 {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}
 </div>
-<div style="font-size: 0.75rem; color: #adb5bd; margin-top: 8px; font-family: monospace;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+<div style="font-size: 0.75rem; color: #adb5bd; margin-top: 5px; font-family: monospace;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
 </div>
 </div>
 """
