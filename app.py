@@ -17,9 +17,15 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    /* Prevent Streamlit from adding gray boxes around our HTML */
-    .stMarkdown div { background-color: transparent !important; border: none !important; }
+    /* 1. Target only the Streamlit wrapper, not our custom cards */
+    [data-testid="stMarkdownContainer"] > div:not(.skim-card) { 
+        background-color: transparent !important; 
+        border: none !important; 
+    }
+    /* 2. Hide the raw code if it leaks */
     code { display: none !important; }
+    /* 3. Force the container to allow full color */
+    .stMarkdown { background: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -189,7 +195,6 @@ st.subheader("🗓️ 10-Day Skim Forecast")
 all_cols = st.columns(5) + st.columns(5)
 available_dates = sorted(df['date_label'].unique(), key=lambda x: datetime.strptime(x.split(', ')[1], '%b %d'))[:10]
 
-# Solid Traffic Light Colors
 traffic_light_hex = {
     "bg-red": "#ff4b4b", "bg-orange": "#ffa500", "bg-yellow": "#f1c40f",
     "bg-lightgreen": "#2ecc71", "bg-darkgreen": "#1b5e20", "bg-purple": "#8e44ad"
@@ -202,38 +207,29 @@ for i, date in enumerate(available_dates):
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
     
-    # Tide Direction
-    tide_arrow = "•"
     if best_hour_idx > 0:
         tide_arrow = "↑" if d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level'] else "↓"
+    else: tide_arrow = "•"
 
-    # Color & Text Logic
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
     line_color = "rgba(0,0,0,0.1)" if text_color == "black" else "rgba(255,255,255,0.3)"
 
-    drop_m, drop_emoji, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
-    wind_info = f"{d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}"
-    swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
-    best_time = d_row['time'].strftime('%I:%M %p')
-
-    # THE FIX: No indentation in the string itself
-    card_html = f"""<div style="background-color: {bg_color}; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; border: 1px solid rgba(0,0,0,0.1); display: flex; flex-direction: column; justify-content: space-between; font-family: sans-serif;">
+    card_html = f"""<div class="skim-card" style="background-color: {bg_color} !important; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; display: flex; flex-direction: column; justify-content: space-between; font-family: sans-serif; border: 1px solid rgba(0,0,0,0.1);">
 <div><div style="font-size: 0.8em; opacity: 0.8; font-weight: bold;">{date}</div>
 <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0;">{label}</div></div>
 <div style="border-top: 1px solid {line_color}; border-bottom: 1px solid {line_color}; padding: 12px 0; margin: 10px 0;">
 <div style="font-size: 1.0em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
-<div style="font-size: 0.85em; opacity: 0.9; margin-top: 4px;">{swell_dir} | 💨 {wind_info}</div></div>
-<div><div style="font-size: 0.9em;"><b>Best Window:</b> {best_time}</div>
+<div style="font-size: 0.85em; opacity: 0.9; margin-top: 4px;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}</div></div>
+<div><div style="font-size: 0.9em;"><b>Best Window:</b> {d_row['time'].strftime('%I:%M %p')}</div>
 <div style="font-size: 1.1em; font-weight: bold; margin-top: 2px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div></div>
-<div style="margin-top: 10px;"><div style="font-size: 0.95em; font-weight: bold;">{drop_emoji} {drop_m}</div>
+<div style="margin-top: 10px;"><div style="font-size: 0.95em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
 <div style="font-size: 1.0em; margin-top: 4px; opacity: 0.9;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div></div>
 </div>"""
 
     with all_cols[i]:
-        # Using unsafe_allow_html is key here
-        st.write(card_html, unsafe_allow_html=True)
+        st.markdown(card_html, unsafe_allow_html=True)
 
 # --- TREND CHART ---
 st.divider()
