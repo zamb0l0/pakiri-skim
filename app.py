@@ -17,30 +17,27 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    /* 1. Force the Streamlit wrapper to be transparent so our colors show through */
-    [data-testid="stMarkdownContainer"] {
+    /* 1. Clear the Streamlit gray boxes BUT ignore our skim-cards */
+    [data-testid="stMarkdownContainer"] > div:not(.skim-card) {
         background-color: transparent !important;
     }
 
-    /* 2. Remove borders and padding Streamlit adds to its own internal divs */
-    div[data-testid="stMarkdownContainer"] > div {
+    /* 2. Remove Streamlit's white background on the markdown block itself */
+    .stMarkdown {
         background-color: transparent !important;
-        border: none !important;
     }
 
-    /* 3. This is the 'Shield': Hide the raw code text if Streamlit glitches */
-    code { 
-        display: none !important; 
-    }
-
-    /* 4. Optional: Smooth transition for when the data updates */
+    /* 3. Force OUR card to be an opaque solid block */
     .skim-card {
-        transition: transform 0.2s ease-in-out;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        opacity: 1 !important;
+        visibility: visible !important;
     }
-    .skim-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.3) !important;
-    }
+
+    /* 4. Hide the annoying code leakage */
+    code { display: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -249,18 +246,26 @@ for i, date in enumerate(available_dates):
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
     line_color = "rgba(0,0,0,0.1)" if text_color == "black" else "rgba(255,255,255,0.3)"
 
-    # Using a style-heavy 'section' tag to force the background-color
-    card_html = f"""<section class="skim-card" style="background-color: {bg_color} !important; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; display: flex; flex-direction: column; justify-content: space-between; font-family: sans-serif; border: 2px solid rgba(255,255,255,0.1); box-shadow: 2px 2px 10px rgba(0,0,0,0.2);">
-<div><div style="font-size: 0.85em; opacity: 0.8; font-weight: bold;">{date}</div>
-<div style="font-size: 1.4em; font-weight: 900; margin: 8px 0;">{label}</div></div>
-<div style="border-top: 1px solid {line_color}; border-bottom: 1px solid {line_color}; padding: 12px 0; margin: 10px 0;">
-<div style="font-size: 1.0em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
-<div style="font-size: 0.85em; opacity: 0.9; margin-top: 4px;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}</div></div>
-<div><div style="font-size: 0.9em;"><b>Best Window:</b> {d_row['time'].strftime('%I:%M %p')}</div>
-<div style="font-size: 1.1em; font-weight: bold; margin-top: 2px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div></div>
-<div style="margin-top: 10px;"><div style="font-size: 0.95em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
-<div style="font-size: 1.0em; margin-top: 4px; opacity: 0.9;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div></div>
-</section>"""
+    # WE ARE USING !important ON EVERY COLOR ATTRIBUTE TO FORCE THE PAINT
+    card_html = f"""
+<div class="skim-card" style="background: {bg_color} !important; background-color: {bg_color} !important; color: {text_color} !important; padding: 20px 15px; border-radius: 15px; text-align: center; min-height: 400px; border: 1px solid rgba(0,0,0,0.1); box-shadow: 2px 2px 8px rgba(0,0,0,0.2); font-family: sans-serif;">
+    <div>
+        <div style="font-size: 0.85em; opacity: 0.8; font-weight: bold; color: {text_color} !important;">{date}</div>
+        <div style="font-size: 1.4em; font-weight: 900; margin: 8px 0; color: {text_color} !important;">{label}</div>
+    </div>
+    <div style="border-top: 1px solid {line_color}; border-bottom: 1px solid {line_color}; padding: 12px 0; margin: 10px 0;">
+        <div style="font-size: 1.0em; font-weight: bold; color: {text_color} !important;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
+        <div style="font-size: 0.85em; opacity: 0.9; margin-top: 4px; color: {text_color} !important;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
+    </div>
+    <div style="margin-bottom: 10px;">
+        <div style="font-size: 0.9em; color: {text_color} !important;"><b>Best:</b> {d_row['time'].strftime('%I:%M %p')}</div>
+        <div style="font-size: 1.1em; font-weight: bold; margin-top: 2px; color: {text_color} !important;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+    </div>
+    <div style="background: rgba(0,0,0,0.1); padding: 10px; border-radius: 10px;">
+        <div style="font-size: 0.95em; font-weight: bold; color: {text_color} !important;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
+        <div style="font-size: 1.0em; margin-top: 4px; opacity: 0.9; color: {text_color} !important;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+    </div>
+</div>"""
 
     with all_cols[i]:
         st.markdown(card_html, unsafe_allow_html=True)
