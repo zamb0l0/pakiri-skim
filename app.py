@@ -111,14 +111,24 @@ def get_expert_score(xi, h, t, wind_deg, wind_speed, tide_h):
 now = datetime.now()
 idx = (df['time'] - now).abs().idxmin()
 now_data = df.loc[idx]
-current_bg, current_label = get_expert_score(now_data['xi'], now_data['swell_wave_height'], now_data['swell_wave_period'], now_data['wind_dir'], now_data['wind_speed'], now_data['tide_level'])
+
+# Fix: Calculate tide_arrow for the 'Now' data
+prev_idx = max(0, idx - 1)
+tide_arrow = "↑" if now_data['tide_level'] > df.loc[prev_idx, 'tide_level'] else "↓"
+
+current_bg, current_label = get_expert_score(
+    now_data['xi'], now_data['swell_wave_height'], 
+    now_data['swell_wave_period'], now_data['wind_dir'], 
+    now_data['wind_speed'], now_data['tide_level']
+)
 
 g_col1, g_col2 = st.columns([1.2, 1.8])
 
 with g_col1:
     fig_gauge = go.Figure(go.Indicator(
         mode = "gauge+number", value = now_data['xi'],
-        title = {'text': f"Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 'font': {'color': 'white' if current_bg == "bg-purple" else 'black'}},
+        title = {'text': f"Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 
+                 'font': {'color': 'black'}},
         gauge = {'axis': {'range': [0, 2.5]}, 'bar': {'color': "black"},
                  'steps': [{'range': [0, 0.8], 'color': '#ff4b4b'}, {'range': [0.8, 1.2], 'color': '#ffa500'},
                            {'range': [1.2, 1.5], 'color': '#2ecc71'}, {'range': [1.5, 2.5], 'color': '#1b5e20'}]}
@@ -126,9 +136,9 @@ with g_col1:
     fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_gauge, use_container_width=True)
     
-    # Stats Summary under gauge
     st.markdown(f"""
-    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid #2d3436;">
+    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid #2d3436; color: #2d3436;">
+        <div style="font-size: 1.1rem; font-weight: 900; margin-bottom: 5px;">LIVE CONDITIONS</div>
         <b>Swell:</b> {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s<br>
         <b>Wind:</b> {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}<br>
         <b>Tide:</b> {now_data['tide_level']:.1f}m ({tide_arrow})
@@ -136,58 +146,56 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # --- SATELLITE MAP WITH OVERLAYS ---
-    # Define vector lengths based on intensity
-    swell_len = 0.005 
-    wind_len = 0.004
-
+    # Vector math for direction arrows
+    swell_len = 0.006 
+    wind_len = 0.005
+    
     fig_map = go.Figure()
 
-    # 1. Predicted Contour Line (Orange) - Slightly offshore Pakiri
+    # 1. Predicted Contour Line (Orange) - Tracking the Pakiri Ledge line
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
-        lon = [174.721, 174.725, 174.730],
-        lat = [-36.264, -36.268, -36.272],
-        line = dict(width=3, color='#e67e22'),
-        name = "Ledge Contour"
+        lon = [174.718, 174.722, 174.728, 174.735],
+        lat = [-36.262, -36.265, -36.269, -36.274],
+        line = dict(width=4, color='#e67e22'),
+        name = "Ledge Contour",
+        hoverinfo='text',
+        text="Predicted Ledge Break"
     ))
 
-    # 2. Swell Direction Vector (Blue)
+    # 2. Swell Vector (Blue) - Pointing TOWARDS the beach
     s_dx = swell_len * np.sin(np.radians(now_data['swell_wave_direction']))
     s_dy = swell_len * np.cos(np.radians(now_data['swell_wave_direction']))
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines+markers",
-        lon = [LON, LON - s_dx],
-        lat = [LAT, LAT - s_dy],
-        marker = dict(size=10, symbol="triangle-up", color="#3498db"),
-        line = dict(width=5, color="#3498db"),
-        name = "Swell Dir"
+        lon = [LON + s_dx, LON],
+        lat = [LAT + s_dy, LAT],
+        marker = dict(size=12, symbol="triangle", color="#3498db"),
+        line = dict(width=6, color="#3498db"),
+        name = "Swell"
     ))
 
-    # 3. Wind Direction Vector (Yellow)
+    # 3. Wind Vector (Yellow)
     w_dx = wind_len * np.sin(np.radians(now_data['wind_dir']))
     w_dy = wind_len * np.cos(np.radians(now_data['wind_dir']))
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines+markers",
-        lon = [LON, LON - w_dx],
-        lat = [LAT, LAT - w_dy],
-        marker = dict(size=8, symbol="star", color="#f1c40f"),
-        line = dict(width=3, color="#f1c40f"),
-        name = "Wind Dir"
+        lon = [LON + w_dx, LON],
+        lat = [LAT + w_dy, LAT],
+        marker = dict(size=10, symbol="circle", color="#f1c40f"),
+        line = dict(width=4, color="#f1c40f"),
+        name = "Wind"
     ))
 
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0},
         height = 450,
         mapbox = {
-            'style': "stamen-terrain", # Or "white-bg" if you want to use ESRI Tile server
-            'center': {'lon': LON, 'lat': LAT},
-            'zoom': 13.5},
+            'style': "open-street-map",
+            'center': {'lon': 174.725, 'lat': -36.268},
+            'zoom': 13.8},
         showlegend = False
     )
-    
-    # Note: For true high-res satellite, you typically need a Mapbox API token. 
-    # This uses 'stamen-terrain' as a placeholder.
     st.plotly_chart(fig_map, use_container_width=True)
 
 # --- VISUALS: DAILY PROFILE COMPARISON ---
