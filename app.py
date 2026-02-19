@@ -3,43 +3,33 @@ import requests
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import streamlit.components.v1 as components
-from datetime import datetime, timedelta
-
-# --- PAKIRI METADATA ---
-LAT = -36.264
-LON = 174.721
-SURFLINE_URL = "https://www.surfline.com/surf-report/pakiri/617874e830bff6bfe69db04e"
-WINDFINDER_URL = "https://www.windfinder.com/forecast/pakiri"
+from datetime import datetime
 
 # --- CONFIG & STYLING ---
 st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", layout="wide")
 
+# 1. THE STYLE BLOCK (CONSOLIDATED)
+# This handles the transparency fixes and hides the "shield" code blocks
 st.markdown(r"""
     <style>
-    /* 1. Clear the Streamlit gray boxes BUT ignore our skim-cards */
-    [data-testid="stMarkdownContainer"] > div:not(.skim-card) {
+    /* Make the outer container transparent so our card border shows */
+    [data-testid="stMarkdownContainer"] {
         background-color: transparent !important;
     }
-
-    /* 2. Remove Streamlit's white background on the markdown block itself */
-    .stMarkdown {
-        background-color: transparent !important;
-    }
-
-    /* 3. Force OUR card to be an opaque solid block */
-    .skim-card {
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-        opacity: 1 !important;
-        visibility: visible !important;
-    }
-
-    /* 4. Hide the annoying code leakage */
+    
+    /* Hide raw code snippets if they try to appear */
     code { display: none !important; }
+    
+    /* Tweak column spacing for the grid */
+    [data-testid="column"] {
+        padding: 0 5px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
+
+# --- PAKIRI METADATA ---
+LAT = -36.264
+LON = 174.721
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -78,6 +68,7 @@ def get_wind_multiplier(deg, speed):
     else: speed_mult = 0.8
     return dir_mult * speed_mult
 
+# --- DATA FETCHING ---
 @st.cache_data(ttl=3600)
 def get_full_data(current_slope):
     w_url = f"https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LON}&hourly=wind_speed_10m,wind_direction_10m&forecast_days=10&timezone=auto"
@@ -164,12 +155,16 @@ daily_geom = df.groupby('date_label').agg({
     'wavelength':'mean', 'R':'max', 'steepness':'mean'
 }).reindex(df['date_label'].unique())
 
-g_cols = [st.columns(5), st.columns(5)]
+g_cols = st.columns(5) + st.columns(5)
 x_vals = np.linspace(10, 100, 150)
 
 for i, (date, row) in enumerate(daily_geom.iterrows()):
     if pd.isna(row['xi']): continue
-    with g_cols[i//5][i%5]:
+    
+    # Safely handle grid overflow if more than 10 dates
+    if i >= len(g_cols): break
+
+    with g_cols[i]:
         y_vals, ledge_x = get_extreme_profile(row['dynamic_slope'], row['xi'])
         drop_mode, drop_emoji, drop_desc = get_drop_logic(row['xi'], row['swell_wave_period'])
         
@@ -192,35 +187,14 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
         st.markdown(f"<div style='text-align:center; font-size:10px; color:#95a5a6; font-style:italic;'>{drop_desc}</div>", unsafe_allow_html=True)
 
-# --- SIMPLIFIED STYLING (STOPS THE BLEACHING) ---
-st.markdown(r"""
-    <style>
-    /* Stop Streamlit from adding gray boxes but don't force transparency on our HTML */
-    [data-testid="stMarkdownContainer"] { background-color: transparent !important; }
-    div[data-testid="stMarkdownContainer"] > div { border: none !important; }
-    code { display: none !important; }
-    
-    /* Ensure the cards look uniform */
-    .skim-card-container {
-        border: 1px solid rgba(128,128,128,0.2);
-        border-radius: 15px;
-        overflow: hidden;
-        text-align: center;
-        min-height: 400px;
-        display: flex;
-        flex-direction: column;
-        background-color: rgba(128,128,128,0.05);
-        font-family: sans-serif;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # --- 10-DAY FORECAST CARDS ---
+st.divider()
 st.subheader("🗓️ 10-Day Skim Forecast")
 
 all_cols = st.columns(5) + st.columns(5)
 available_dates = sorted(df['date_label'].unique(), key=lambda x: datetime.strptime(x.split(', ')[1], '%b %d'))[:10]
 
+# Standard Hex Colors
 traffic_light_hex = {
     "bg-red": "#ff4b4b", "bg-orange": "#ffa500", "bg-yellow": "#f1c40f",
     "bg-lightgreen": "#2ecc71", "bg-darkgreen": "#1b5e20", "bg-purple": "#8e44ad"
@@ -233,37 +207,44 @@ for i, date in enumerate(available_dates):
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
     
+    # Tide Direction Logic
     tide_arrow = "↑" if (best_hour_idx > 0 and d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level']) else "↓"
 
+    # Get Score & Colors
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
     text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
 
-    # THE HTML: COLOR IS NOW IN THE TOP BAR ONLY
+    # --- THE HTML: SEPARATED HEADER (COLOR) AND BODY (WHITE/GRAY) ---
     card_html = f"""
-<div class="skim-card-container">
-    <div style="background-color: {bg_color} !important; color: {text_color} !important; padding: 12px; font-weight: 900; font-size: 1.2em; border-bottom: 2px solid rgba(0,0,0,0.1);">
-        {label}
-    </div>
-    
-    <div style="padding: 10px; font-size: 0.8em; opacity: 0.7; font-weight: bold;">{date}</div>
+    <div style="border: 1px solid rgba(128,128,128,0.2); border-radius: 12px; overflow: hidden; font-family: sans-serif; margin-bottom: 10px;">
+        <div style="background-color: {bg_color}; color: {text_color}; padding: 12px; text-align: center; font-weight: 900; font-size: 1.1em;">
+            {label}
+        </div>
+        
+        <div style="padding: 15px; text-align: center; background-color: rgba(128,128,128,0.05);">
+            <div style="font-size: 0.85em; opacity: 0.7; font-weight: bold; margin-bottom: 5px;">{date}</div>
+            
+            <div style="font-size: 1.0em; font-weight: bold; margin: 10px 0;">
+                🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s
+            </div>
+            
+            <div style="font-size: 0.85em; opacity: 0.9;">
+                 💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}
+            </div>
 
-    <div style="padding: 10px; border-top: 1px solid rgba(128,128,128,0.1); border-bottom: 1px solid rgba(128,128,128,0.1); margin: 0 10px;">
-        <div style="font-size: 1.0em; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
-        <div style="font-size: 0.8em; margin-top: 4px;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
-    </div>
+            <div style="border-top: 1px solid rgba(128,128,128,0.1); margin: 10px 0; padding-top: 10px;">
+                <div style="font-size: 0.9em;"><b>Best:</b> {d_row['time'].strftime('%I:%M %p')}</div>
+                <div style="font-size: 1.0em; font-weight: bold;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+            </div>
 
-    <div style="padding: 15px 10px; flex-grow: 1;">
-        <div style="font-size: 0.9em;"><b>Best Window:</b></div>
-        <div style="font-size: 1.0em;">{d_row['time'].strftime('%I:%M %p')}</div>
-        <div style="font-size: 1.1em; font-weight: bold; margin-top: 5px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+             <div style="margin-top: 10px;">
+                <div style="font-size: 0.9em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]}</div>
+                <div style="font-size: 0.8em; opacity: 0.8;">ξ {d_row['xi']:.2f}</div>
+            </div>
+        </div>
     </div>
-
-    <div style="padding: 10px; background: rgba(0,0,0,0.05);">
-        <div style="font-size: 0.9em; font-weight: bold;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
-        <div style="font-size: 0.9em; margin-top: 2px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
-    </div>
-</div>"""
+    """
 
     with all_cols[i]:
         st.markdown(card_html, unsafe_allow_html=True)
