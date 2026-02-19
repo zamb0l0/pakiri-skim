@@ -17,22 +17,9 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    .card { 
-        padding: 15px; 
-        border-radius: 12px; 
-        text-align: center; 
-        color: white !important; 
-        font-weight: bold; 
-        margin-bottom: 10px; 
-        min-height: 280px; 
-        border: 1px solid rgba(255,255,255,0.1); 
-        transition: transform 0.2s;
-        display: block;
-        overflow: hidden;
-    }
-    .card:hover { transform: scale(1.02); }
-    /* This prevents Streamlit from adding extra padding/boxes around markdown */
-    .stMarkdown div { background-color: transparent !important; }
+    .card { padding: 12px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 280px; border: 1px solid rgba(255,255,255,0.1); }
+    /* This line is the magic fix for "Code Box" backgrounds */
+    .stMarkdown div { background-color: transparent !important; border: none !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -197,36 +184,31 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
     day_data = df[df['date_label'] == date]
     if day_data.empty: continue
     
-    # Selecting the hour with the highest Ledge Quality (xi)
     d_row = day_data.iloc[day_data['xi'].argmax()]
-    
-    # Metadata & Scoring
     color, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     drop_m, _, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
     
-    # Formatting Directions & Arrows
+    # Metadata
     wind_info = f"{d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}"
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # THE HTML STRING: Division into 3 clean parts
+    # THE HTML STRING (MUST HAVE ZERO LEADING SPACES)
     card_html = f"""
 <div class='card {color}'>
-    <div style='background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px; margin-bottom: 8px;'>
-        <div style='font-size: 1.0em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
-        <div style='font-size: 0.85em; opacity: 0.9; margin-top: 4px;'>💨 {wind_info}</div>
-    </div>
-
-    <div style='margin-bottom: 8px;'>
-        <div style='font-size: 0.8em; opacity: 0.8;'>{date}</div>
-        <div style='font-size: 1.2em; margin: 2px 0;'><strong>{label}</strong></div>
-        <div style='font-size: 0.8em; color: white; opacity: 0.9;'>Best: {best_time} ({d_row['tide_level']:.1f}m Tide)</div>
-    </div>
-
-    <div style='background: rgba(255,255,255,0.2); padding: 8px; border-radius: 8px;'>
-        <div style='font-size: 0.85em; color: #f1c40f; font-weight: bold; letter-spacing: 0.5px;'>{drop_m}</div>
-        <div style='font-size: 1.0em; margin-top: 4px;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
-    </div>
+<div style='background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px; margin-bottom: 8px;'>
+<div style='font-size: 0.95em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
+<div style='font-size: 0.85em; opacity: 0.9; margin-top: 4px;'>💨 {wind_info}</div>
+</div>
+<div style='margin-bottom: 8px;'>
+<div style='font-size: 0.75em; opacity: 0.8;'>{date}</div>
+<div style='font-size: 1.1em; margin: 2px 0;'><strong>{label}</strong></div>
+<div style='font-size: 0.8em; opacity: 0.9;'>Best: {best_time} ({d_row['tide_level']:.1f}m Tide)</div>
+</div>
+<div style='background: rgba(255,255,255,0.2); padding: 8px; border-radius: 8px;'>
+<div style='font-size: 0.85em; color: #f1c40f; font-weight: bold;'>{drop_m}</div>
+<div style='font-size: 1.0em; margin-top: 4px;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+</div>
 </div>"""
 
     with cols[i//5][i%5]:
