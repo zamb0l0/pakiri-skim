@@ -17,9 +17,8 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    .card { padding: 10px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 350px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 6px; }
+    .card { padding: 10px; border-radius: 12px; text-align: center; color: white !important; margin-bottom: 10px; min-height: 350px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 6px; justify-content: space-between; }
     
-    /* Traffic Light System */
     .bg-red { background-color: #ff4b4b !important; }
     .bg-orange { background-color: #ffa500 !important; }
     .bg-yellow { background-color: #f1c40f !important; color: black !important; }
@@ -27,7 +26,6 @@ st.markdown(r"""
     .bg-darkgreen { background-color: #1b5e20 !important; border: 2px solid gold; }
     .bg-purple { background-color: #8e44ad !important; border: 2px solid #ff00ff; }
     
-    /* Force Render - No Code Blocks */
     .stMarkdown div { background-color: transparent !important; border: none !important; }
     code { display: none !important; } 
     </style>
@@ -197,12 +195,15 @@ for i in range(10):
     day_data = df[df['date_label'] == date]
     if day_data.empty: continue
     
-    d_row = day_data.iloc[day_data['xi'].argmax()]
+    # Locate the best hour
+    best_hour_idx = day_data['xi'].idxmax()
+    d_row = df.loc[best_hour_idx]
     
-    # Calculate Tide Trend (is it rising or falling?)
-    # Compare current hour tide to the previous hour
-    current_idx = d_row.name
-    tide_arrow = "↑" if df.loc[current_idx, 'tide_level'] > df.loc[current_idx-1, 'tide_level'] else "↓"
+    # KEYERROR FIX: Check if index is at the start of the dataframe
+    if best_hour_idx > 0:
+        tide_arrow = "↑" if d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level'] else "↓"
+    else:
+        tide_arrow = "•"
 
     color, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     drop_m, _, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
@@ -211,22 +212,22 @@ for i in range(10):
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # THE HTML - NO INDENTATION ALLOWED
+    # ZERO INDENTATION HTML
     card_html = f"""
 <div class='card {color}'>
-<div style='background: rgba(0,0,0,0.2); padding: 5px; border-radius: 6px;'>
+<div style='background: rgba(0,0,0,0.2); padding: 6px; border-radius: 8px;'>
 <div style='font-size: 0.9em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
 <div style='font-size: 0.8em; opacity: 0.9;'>💨 {wind_info}</div>
 </div>
 <div style='margin: 4px 0;'>
 <div style='font-size: 0.7em; opacity: 0.9;'>{date}</div>
-<div style='font-size: 1.1em;'><b>{label}</b></div>
+<div style='font-size: 1.15em;'><b>{label}</b></div>
 </div>
-<div style='background: rgba(255,255,255,0.15); padding: 5px; border-radius: 6px; font-size: 0.85em;'>
+<div style='background: rgba(255,255,255,0.15); padding: 6px; border-radius: 8px; font-size: 0.85em;'>
 <b>Time:</b> {best_time}<br>
 <b>Tide:</b> {d_row['tide_level']:.1f}m {tide_arrow}
 </div>
-<div style='background: rgba(255,255,255,0.25); padding: 5px; border-radius: 6px;'>
+<div style='background: rgba(255,255,255,0.25); padding: 6px; border-radius: 8px;'>
 <div style='font-size: 0.8em; color: #f1c40f; font-weight: bold;'>{drop_m}</div>
 <div style='font-size: 0.95em; margin-top: 2px;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
 </div>
