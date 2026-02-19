@@ -8,25 +8,6 @@ from datetime import datetime
 # --- CONFIG & STYLING ---
 st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", layout="wide")
 
-# 1. THE STYLE BLOCK (CONSOLIDATED)
-# This handles the transparency fixes and hides the "shield" code blocks
-st.markdown(r"""
-    <style>
-    /* Make the outer container transparent so our card border shows */
-    [data-testid="stMarkdownContainer"] {
-        background-color: transparent !important;
-    }
-    
-    /* Hide raw code snippets if they try to appear */
-    code { display: none !important; }
-    
-    /* Tweak column spacing for the grid */
-    [data-testid="column"] {
-        padding: 0 5px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # --- PAKIRI METADATA ---
 LAT = -36.264
 LON = 174.721
@@ -188,13 +169,11 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
         st.markdown(f"<div style='text-align:center; font-size:10px; color:#95a5a6; font-style:italic;'>{drop_desc}</div>", unsafe_allow_html=True)
 
 # --- 10-DAY FORECAST CARDS ---
-st.divider()
 st.subheader("🗓️ 10-Day Skim Forecast")
 
 all_cols = st.columns(5) + st.columns(5)
 available_dates = sorted(df['date_label'].unique(), key=lambda x: datetime.strptime(x.split(', ')[1], '%b %d'))[:10]
 
-# Standard Hex Colors
 traffic_light_hex = {
     "bg-red": "#ff4b4b", "bg-orange": "#ffa500", "bg-yellow": "#f1c40f",
     "bg-lightgreen": "#2ecc71", "bg-darkgreen": "#1b5e20", "bg-purple": "#8e44ad"
@@ -206,47 +185,34 @@ for i, date in enumerate(available_dates):
     
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
-    
-    # Tide Direction Logic
     tide_arrow = "↑" if (best_hour_idx > 0 and d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level']) else "↓"
 
-    # Get Score & Colors
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
     bg_color = traffic_light_hex.get(color_class, "#333333")
-    
-    # Text color for the Header bar (Dark backgrounds need white text)
-    header_text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
+    header_text = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
 
-    # --- THE HTML: DATA RESTORED ---
+    # SIMPLEST POSSIBLE HTML STRATEGY
     card_html = f"""
-    <div style="border: 1px solid rgba(128,128,128,0.3); border-radius: 12px; overflow: hidden; font-family: sans-serif; margin-bottom: 15px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1);">
-        <div style="background-color: {bg_color} !important; color: {header_text_color} !important; padding: 12px; text-align: center; font-weight: 900; font-size: 1.1em; text-transform: uppercase; letter-spacing: 1px;">
+    <div style="background-color: white; border: 2px solid #ddd; border-radius: 10px; overflow: hidden; font-family: sans-serif; min-height: 350px;">
+        <div style="background-color: {bg_color}; color: {header_text}; padding: 10px; text-align: center; font-weight: bold; font-size: 1.1rem;">
             {label}
         </div>
-        
-        <div style="padding: 15px; text-align: center; background-color: white; color: #1e1e1e; min-height: 250px; display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-                <div style="font-size: 0.9em; color: #666; font-weight: bold; margin-bottom: 8px;">{date}</div>
-                
-                <div style="font-size: 1.2em; font-weight: 800; color: #000; margin: 5px 0;">
-                    🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s
-                </div>
-                
-                <div style="font-size: 0.9em; color: #444; margin-bottom: 12px;">
-                     {get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}
-                </div>
+        <div style="padding: 15px; color: black; text-align: center;">
+            <div style="font-weight: bold; color: #555; font-size: 0.8rem;">{date}</div>
+            <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
+            <div style="font-size: 1.2rem; font-weight: bold;">🌊 {d_row['swell_wave_height']:.1f}m @ {d_row['swell_wave_period']:.0f}s</div>
+            <div style="font-size: 0.8rem; color: #444; margin-top: 5px;">{get_arrow_with_name(d_row['swell_wave_direction'])} | 💨 {d_row['wind_speed']:.0f}km/h</div>
+            
+            <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; margin: 15px 0;">
+                <div style="font-size: 0.8rem; color: #666;">BEST TIDE</div>
+                <div style="font-size: 1.1rem; font-weight: bold;">{d_row['tide_level']:.1f}m {tide_arrow}</div>
+                <div style="font-size: 0.9rem;">{d_row['time'].strftime('%I:%M %p')}</div>
             </div>
 
-            <div style="border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 10px 0; margin: 10px 0;">
-                <div style="font-size: 0.85em; color: #666;">BEST WINDOW</div>
-                <div style="font-size: 1.0em; font-weight: bold; color: #1e1e1e;">{d_row['time'].strftime('%I:%M %p')}</div>
-                <div style="font-size: 1.1em; font-weight: 800; color: #2c3e50; margin-top: 4px;">Tide: {d_row['tide_level']:.1f}m {tide_arrow}</div>
+            <div style="font-weight: bold; color: #2ecc71; font-size: 0.9rem;">
+                {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}
             </div>
-
-             <div>
-                <div style="font-size: 0.95em; font-weight: 900; color: #2ecc71;">{get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[1]} {get_drop_logic(d_row['xi'], d_row['swell_wave_period'])[0]}</div>
-                <div style="font-size: 0.85em; color: #888; margin-top: 4px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
-            </div>
+            <div style="font-size: 0.75rem; color: #999; margin-top: 5px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
         </div>
     </div>
     """
