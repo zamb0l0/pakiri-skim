@@ -201,3 +201,28 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
 </div>"""
     with cols[i//5][i%5]:
         st.markdown(card_html, unsafe_allow_html=True)
+
+# --- TREND CHART ---
+st.divider()
+st.subheader("📈 Quality vs Tide Trend")
+fig_trend = go.Figure()
+fig_trend.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1), yaxis="y2"))
+fig_trend.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=4)))
+fig_trend.update_layout(height=400, width=1500, yaxis=dict(title="Quality", range=[0, 2.5]), yaxis2=dict(overlaying="y", side="right", range=[0, 5]))
+st.plotly_chart(fig_trend, use_container_width=True)
+
+# --- TECHNICAL DOCUMENTATION ---
+with st.expander("🔬 How the Pakiri Ledge Engine Works"):
+    st.markdown("### 🛰️ The Data Pipeline: From Ocean to Forecast")
+    doc_col1, doc_col2 = st.columns([1, 1])
+    with doc_col1:
+        st.markdown(r"""
+        **1. Raw Data Acquisition**
+        Pulling live data for coordinates ($36.26^\circ S, 174.72^\circ E$):
+        * **GFS:** Wind speed and direction (matches Windfinder).
+        * **MeteoFrance:** Swell heights and periods (matches Surfline).
+
+        **2. The Pakiri Transformation**
+        * **Wavelength ($L$):** $L = \frac{g \cdot T^2}{2\pi}$.
+        * **Dynamic Slope:** The beach slope peaks at High Tide.
+        """)
