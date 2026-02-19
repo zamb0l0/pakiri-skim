@@ -17,15 +17,22 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 
 st.markdown(r"""
     <style>
-    .card { padding: 15px; border-radius: 12px; text-align: center; color: white; font-weight: bold; margin-bottom: 10px; min-height: 280px; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
+    .card { 
+        padding: 15px; 
+        border-radius: 12px; 
+        text-align: center; 
+        color: white !important; 
+        font-weight: bold; 
+        margin-bottom: 10px; 
+        min-height: 280px; 
+        border: 1px solid rgba(255,255,255,0.1); 
+        transition: transform 0.2s;
+        display: block;
+        overflow: hidden;
+    }
     .card:hover { transform: scale(1.02); }
-    .bg-red { background-color: #ff4b4b; }
-    .bg-orange { background-color: #ffa500; }
-    .bg-yellow { background-color: #f1c40f; color: black !important; }
-    .bg-lightgreen { background-color: #2ecc71; color: black !important; }
-    .bg-darkgreen { background-color: #1b5e20; border: 2px solid gold; }
-    .bg-blue { background-color: #2980b9; border: 2px solid gold; }
-    .bg-purple { background-color: #8e44ad; border: 2px solid #ff00ff; }
+    /* This prevents Streamlit from adding extra padding/boxes around markdown */
+    .stMarkdown div { background-color: transparent !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -196,14 +203,15 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
     wind_info = f"{d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}"
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # FIX: No leading spaces in the HTML string prevents the "Code Box" look
-    card_html = f"""<div class='card {color}'>
+    # THE HTML STRING MUST NOT HAVE LEADING SPACES/INDENTATION
+    card_html = f"""
+<div class='card {color}'>
 <div style='font-size: 0.8em; opacity: 0.8;'>{date}</div>
 <div style='font-size: 1.1em; margin: 2px 0;'><strong>{label}</strong></div>
 <div style='font-size: 0.85em; margin-bottom: 8px; color: #f1c40f; font-weight: bold;'>{drop_m}</div>
 <div style='font-size: 0.95em;'>🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s</div>
 <div style='font-size: 0.85em; opacity: 0.9; margin-top: 2px;'>💨 {wind_info}</div>
-<div style='background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px; margin: 8px auto; font-size: 0.8em; width: fit-content;'>Best Window: {best_time}</div>
+<div style='background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 6px; margin: 10px auto; font-size: 0.85em; width: fit-content;'>Best Window: {best_time}</div>
 <hr style='margin:10px 0; border: 0.5px solid rgba(255,255,255,0.2);'>
 <div style='font-size: 1.0em;'>ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
 <div style='font-size: 0.75em; opacity: 0.7; margin-top: 4px;'>Tide at peak: {d_row['tide_level']:.1f}m</div>
