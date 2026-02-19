@@ -124,29 +124,8 @@ current_bg, current_label = get_expert_score(
 
 g_col1, g_col2 = st.columns([1.2, 1.8])
 
-with g_col1:
-    fig_gauge = go.Figure(go.Indicator(
-        mode = "gauge+number", value = now_data['xi'],
-        title = {'text': f"Ledge Quality (ξ)<br><span style='font-size:0.8em;color:gray'>{current_label}</span>", 
-                 'font': {'color': 'black'}},
-        gauge = {'axis': {'range': [0, 2.5]}, 'bar': {'color': "black"},
-                 'steps': [{'range': [0, 0.8], 'color': '#ff4b4b'}, {'range': [0.8, 1.2], 'color': '#ffa500'},
-                           {'range': [1.2, 1.5], 'color': '#2ecc71'}, {'range': [1.5, 2.5], 'color': '#1b5e20'}]}
-    ))
-    fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor='rgba(0,0,0,0)')
-    st.plotly_chart(fig_gauge, use_container_width=True)
-    
-    st.markdown(f"""
-    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid #2d3436; color: #2d3436;">
-        <div style="font-size: 1.1rem; font-weight: 900; margin-bottom: 5px;">LIVE CONDITIONS</div>
-        <b>Swell:</b> {now_data['swell_wave_height']:.1f}m @ {now_data['swell_wave_period']:.0f}s<br>
-        <b>Wind:</b> {now_data['wind_speed']:.0f}km/h {get_arrow_with_name(now_data['wind_dir'])}<br>
-        <b>Tide:</b> {now_data['tide_level']:.1f}m ({tide_arrow})
-    </div>
-    """, unsafe_allow_html=True)
-
 with g_col2:
-    # Coordinate for the specific pin provided
+    # Exact Pin Coordinates: 36°14'10.4"S 174°43'05.6"E
     LAT, LON = -36.236222, 174.718222
 
     # Vector lengths for visual clarity
@@ -155,16 +134,7 @@ with g_col2:
 
     fig_map = go.Figure()
 
-    # 1. Predicted Contour Line (Orange) - Tracking the ledge at the pin
-    fig_map.add_trace(go.Scattermapbox(
-        mode = "lines",
-        lon = [174.715, 174.718, 174.722, 174.726],
-        lat = [-36.233, -36.236, -36.239, -36.242],
-        line = dict(width=4, color='#e67e22'),
-        name = "Ledge Contour"
-    ))
-
-    # 2. Swell Direction Vector (Blue) - Pointing towards the beach
+    # 1. Swell Direction Vector (Blue) - Pointing towards the beach
     s_dx = swell_len * np.sin(np.radians(now_data['swell_wave_direction']))
     s_dy = swell_len * np.cos(np.radians(now_data['swell_wave_direction']))
     fig_map.add_trace(go.Scattermapbox(
@@ -176,7 +146,7 @@ with g_col2:
         name = "Swell"
     ))
 
-    # 3. Wind Direction Vector (Yellow)
+    # 2. Wind Direction Vector (Yellow)
     w_dx = wind_len * np.sin(np.radians(now_data['wind_dir']))
     w_dy = wind_len * np.cos(np.radians(now_data['wind_dir']))
     fig_map.add_trace(go.Scattermapbox(
@@ -188,17 +158,37 @@ with g_col2:
         name = "Wind"
     ))
 
+    # 3. Predicted Ledge Contour (Orange)
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "lines",
+        lon = [174.715, 174.718, 174.722, 174.726],
+        lat = [-36.233, -36.236, -36.239, -36.242],
+        line = dict(width=4, color='#e67e22'),
+        name = "Ledge Contour"
+    ))
+
+    # --- THE FIX FOR BLANK MAPS (ESRI Satellite Tiles) ---
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0},
         height = 450,
         mapbox = {
-            'style': "satellite", 
+            'style': "white-bg",
+            'layers': [
+                {
+                    'below': 'traces',
+                    'sourcetype': 'raster',
+                    'sourceattribution': 'Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+                    'source': [
+                        "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}"
+                    ]
+                }
+            ],
             'center': {'lon': LON, 'lat': LAT},
-            'zoom': 15}, 
+            'zoom': 15
+        },
         showlegend = False
     )
     
-    # Error fixed here (removed the stray 'N')
     st.plotly_chart(fig_map, use_container_width=True)
 
 # --- VISUALS: DAILY PROFILE COMPARISON ---
