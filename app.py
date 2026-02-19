@@ -174,58 +174,66 @@ for i, (date, row) in enumerate(daily_geom.iterrows()):
         st.plotly_chart(fig_mini, use_container_width=True, config={'displayModeBar': False})
         st.markdown(f"<div style='text-align:center; font-size:10px; color:#95a5a6; font-style:italic;'>{drop_desc}</div>", unsafe_allow_html=True)
 
-# --- 10-DAY FORECAST CARDS ---
+# 1. THE SHIELD (Place this once near the top of your script)
+st.markdown(r"""
+    <style>
+    /* This stops Streamlit from wrapping your HTML in a code-block box */
+    .stMarkdown div { background-color: transparent !important; border: none !important; }
+    code { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. THE 10-DAY FORECAST BLOCK
 st.subheader("🗓️ 10-Day Skim Forecast")
 
-# Force exactly 10 columns
 all_cols = st.columns(5) + st.columns(5)
-
-# Ensure chronological order and take the first 10 unique dates
 available_dates = sorted(df['date_label'].unique(), key=lambda x: datetime.strptime(x.split(', ')[1], '%b %d'))[:10]
+
+traffic_light_hex = {
+    "bg-red": "#ff4b4b", "bg-orange": "#ffa500", "bg-yellow": "#f1c40f",
+    "bg-lightgreen": "#2ecc71", "bg-darkgreen": "#1b5e20", "bg-purple": "#8e44ad"
+}
 
 for i, date in enumerate(available_dates):
     day_data = df[df['date_label'] == date]
     if day_data.empty: continue
     
-    # Get the best hour (Max xi)
     best_hour_idx = day_data['xi'].idxmax()
     d_row = df.loc[best_hour_idx]
     
-    # Tide trend arrow logic
+    # Tide Direction Logic
+    tide_arrow = "•"
     if best_hour_idx > 0:
         tide_arrow = "↑" if d_row['tide_level'] > df.loc[best_hour_idx-1, 'tide_level'] else "↓"
-    else:
-        tide_arrow = "•"
 
-    # Color Mapping
+    # Color & Contrast Logic
     color_class, label = get_expert_score(d_row['xi'], d_row['swell_wave_height'], d_row['swell_wave_period'], d_row['wind_dir'], d_row['wind_speed'], d_row['tide_level'])
-    color_map = {"bg-red": "#ff4b4b", "bg-orange": "#ffa500", "bg-yellow": "#f1c40f", "bg-lightgreen": "#2ecc71", "bg-darkgreen": "#1b5e20", "bg-purple": "#8e44ad"}
-    hex_color = color_map.get(color_class, "#333333")
-    text_color = "black" if hex_color in ["#f1c40f", "#2ecc71"] else "white"
+    bg_color = traffic_light_hex.get(color_class, "#333333")
+    text_color = "black" if bg_color in ["#f1c40f", "#2ecc71"] else "white"
 
     drop_m, drop_emoji, _ = get_drop_logic(d_row['xi'], d_row['swell_wave_period'])
     wind_info = f"{d_row['wind_speed']:.0f}km/h {get_arrow_with_name(d_row['wind_dir'])}"
     swell_dir = get_arrow_with_name(d_row['swell_wave_direction'])
     best_time = d_row['time'].strftime('%I:%M %p')
 
-    # THE HTML - MUST BE FLUSH TO THE LEFT MARGIN
+    # THE HTML (FLUSH TO LEFT MARGIN)
     card_html = f"""
-<div style="background-color: {hex_color}; color: {text_color} !important; padding: 12px; border-radius: 12px; text-align: center; min-height: 380px; border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; font-family: sans-serif;">
-<div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px; margin-bottom: 10px;">
+<div style="background-color: {bg_color}; color: {text_color} !important; padding: 15px; border-radius: 12px; text-align: center; min-height: 385px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 10px; font-family: sans-serif; display: flex; flex-direction: column; justify-content: space-between;">
+<div style="background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px;">
 <div style="font-size: 0.95em;">🌊 <b>{d_row['swell_wave_height']:.1f}m</b> @ {d_row['swell_wave_period']:.0f}s {swell_dir}</div>
 <div style="font-size: 0.85em; opacity: 0.9;">💨 {wind_info}</div>
 </div>
-<div style="margin-bottom: 10px;">
+<div>
 <div style="font-size: 0.8em; opacity: 0.8;">{date}</div>
 <div style="font-size: 1.2em; font-weight: bold; margin: 4px 0;">{label}</div>
 </div>
-<div style="background: rgba(255,255,255,0.25); padding: 8px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9em; color: {text_color} !important;">
-<b style="color: {text_color} !important;">Best Window:</b> {best_time}<br>
-<b style="color: {text_color} !important;">Tide:</b> {d_row['tide_level']:.1f}m {tide_arrow}
+<div style="background: rgba(255,255,255,0.25); padding: 8px; border-radius: 8px; font-size: 0.9em;">
+<b>Best Window:</b> {best_time}<br>
+<b>Tide:</b> {d_row['tide_level']:.1f}m {tide_arrow}
 </div>
-<div style="background: rgba(0,0,0,0.15); padding: 8px; border-radius: 8px;">
+<div style="background: rgba(0,0,0,0.1); padding: 8px; border-radius: 8px;">
 <div style="font-size: 0.9em; font-weight: bold; color: {'#333' if text_color=='black' else 'gold'};">{drop_emoji} {drop_m}</div>
-<div style="font-size: 1.0em; margin-top: 4px; color: {text_color} !important;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
+<div style="font-size: 1.0em; margin-top: 4px;">ξ {d_row['xi']:.2f} | R {d_row['R']:.0f}%</div>
 </div>
 </div>"""
 
