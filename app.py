@@ -238,6 +238,15 @@ for i, date in enumerate(available_dates):
     with all_cols[i]:
         st.markdown(card_html, unsafe_allow_html=True)
 
+# --- TREND CHART ---
+st.divider()
+st.subheader("📈 Quality vs Tide Trend")
+fig_trend = go.Figure()
+fig_trend.add_trace(go.Scatter(x=df['time'], y=df['tide_level'], name="Tide", line=dict(color='black', width=1), yaxis="y2"))
+fig_trend.add_trace(go.Scatter(x=df['time'], y=df['xi'], name="Quality", line=dict(color='#f1c40f', width=4)))
+fig_trend.update_layout(height=400, width=1500, yaxis=dict(title="Quality", range=[0, 2.5]), yaxis2=dict(overlaying="y", side="right", range=[0, 5]))
+st.plotly_chart(fig_trend, use_container_width=True)
+
 # --- TECHNICAL DOCUMENTATION ---
 with st.expander("🔬 How the Pakiri Ledge Engine Works"):
     st.markdown("### 🛰️ The Data Pipeline: From Ocean to Forecast")
