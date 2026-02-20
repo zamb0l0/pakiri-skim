@@ -149,67 +149,87 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. THE SURFLINE-STYLE SATELLITE COMPASS
+    # 3. THE HIGH-DEFINITION SURFLINE COMPASS
     LAT, LON = -36.236222, 174.718222
     
     fig_map = go.Figure()
 
-    # --- 1. COMPASS RING (White Circle) ---
-    # Creates a visual 'dial' around the center point
+    # --- 1. THE BOLD COMPASS DIAL (Degrees & Bearings) ---
     ring_angles = np.linspace(0, 2*np.pi, 100)
-    ring_dist = 0.004 # Radius of the ring
+    ring_dist = 0.0035  # Fixed scale for the dial
+    
+    # White Outer Ring
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
         lon = LON + ring_dist * np.sin(ring_angles),
         lat = LAT + ring_dist * np.cos(ring_angles),
-        line = dict(width=2, color="white"),
-        opacity=0.5, hoverinfo='none'
+        line = dict(width=3, color="white"),
+        opacity=0.8, hoverinfo='none'
     ))
 
+    # Add Cardinal Degree Labels
+    bearings = [
+        {'deg': 0, 'label': '0°'}, {'deg': 90, 'label': '90°'},
+        {'deg': 180, 'label': '180°'}, {'deg': 270, 'label': '270°'}
+    ]
+    for b in bearings:
+        rad = np.radians(b['deg'])
+        fig_map.add_trace(go.Scattermapbox(
+            mode = "text",
+            lon = [LON + (ring_dist + 0.0008) * np.sin(rad)],
+            lat = [LAT + (ring_dist + 0.0008) * np.cos(rad)],
+            text = [b['label']],
+            textfont = dict(size=14, color="white", family="Arial Black"),
+            hoverinfo='none'
+        ))
+
     # --- 2. DYNAMIC CONTOURS (Linked to Slope) ---
-    base_spacing = 0.00002 / now_data['dynamic_slope'] 
+    # We use dynamic spacing to show the ledge "drop-off"
+    base_spacing = 0.00003 / now_data['dynamic_slope'] 
     for i, color in enumerate(['#e67e22', '#d35400', '#ba4a00']):
         offset = i * base_spacing
         fig_map.add_trace(go.Scattermapbox(
             mode = "lines",
             lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
             lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
-            line = dict(width=2-i*0.5, color=color),
+            line = dict(width=4 - i, color=color), # Progressively thinner
             opacity=1.0 - (i*0.3), showlegend=False, hoverinfo='none'
         ))
 
-    # --- 3. SURFLINE ARROWS (Scattermapbox Markers) ---
-    # Swell Arrow
-    s_angle = now_data['swell_wave_direction']
+    # --- 3. BOLD COMPASS NEEDLES (Swell & Wind) ---
+    # Swell Needle: Thick Blue Arrow pointing INTO the beach
+    s_deg = now_data['swell_wave_direction']
+    s_rad = np.radians(s_deg)
     fig_map.add_trace(go.Scattermapbox(
-        mode = "markers",
-        lon = [LON - 0.0035 * np.sin(np.radians(s_angle))],
-        lat = [LAT - 0.0035 * np.cos(np.radians(s_angle))],
-        marker = dict(size=25, symbol="marker", angle=s_angle, color="#3498db"),
-        name = "Swell Dir",
-        text = f"Swell: {s_angle}°", hoverinfo="text"
+        mode = "lines+markers",
+        lon = [LON + ring_dist * np.sin(s_rad), LON],
+        lat = [LAT + ring_dist * np.cos(s_rad), LAT],
+        line = dict(width=8, color="#3498db"), # Very thick
+        marker = dict(size=15, symbol="triangle", angle=s_deg+180, color="#3498db"),
+        name = "Swell"
     ))
 
-    # Wind Arrow
-    w_angle = now_data['wind_dir']
+    # Wind Needle: Yellow Arrow
+    w_deg = now_data['wind_dir']
+    w_rad = np.radians(w_deg)
     fig_map.add_trace(go.Scattermapbox(
-        mode = "markers",
-        lon = [LON - 0.0025 * np.sin(np.radians(w_angle))],
-        lat = [LAT - 0.0025 * np.cos(np.radians(w_angle))],
-        marker = dict(size=18, symbol="triangle", angle=w_angle, color="#f1c40f"),
-        name = "Wind Dir",
-        text = f"Wind: {w_angle}°", hoverinfo="text"
+        mode = "lines+markers",
+        lon = [LON + (ring_dist-0.001) * np.sin(w_rad), LON],
+        lat = [LAT + (ring_dist-0.001) * np.cos(w_rad), LAT],
+        line = dict(width=5, color="#f1c40f"),
+        marker = dict(size=12, symbol="triangle", angle=w_deg+180, color="#f1c40f"),
+        name = "Wind"
     ))
 
     fig_map.update_layout(
-        margin = {'l':0,'t':0,'b':0,'r':0}, height = 450,
+        margin = {'l':0,'t':0,'b':0,'r':0}, height = 500,
         mapbox = {
             'style': "white-bg",
             'layers': [{
                 'below': 'traces', 'sourcetype': 'raster',
                 'source': ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"]
             }],
-            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.8
+            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.5
         }, showlegend = False
     )
     st.plotly_chart(fig_map, use_container_width=True)
