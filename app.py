@@ -149,21 +149,23 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. HIGH-FIDELITY SURFLINE COMPASS
+    # 3. HIGH-FIDELITY CIRCULAR SURFLINE COMPASS
     LAT, LON = -36.236222, 174.718222
     fig_map = go.Figure()
 
-    # --- 1. THE PERFECT CIRCLE DIAL & TICK MARKS ---
-    ring_dist = 0.0035  # The radius of our dial
+    # --- 1. THE PERFECT CIRCLE DIAL (Mercator Corrected) ---
+    # To make a circle look round at -36 deg Lat, we multiply Lat by 1.25
+    ring_dist = 0.0028  # Reduced by 20% (from 0.0035)
+    lat_correction = 1.25 
     angles = np.linspace(0, 2*np.pi, 200)
     
     # Main White Ring
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
         lon = LON + ring_dist * np.sin(angles),
-        lat = LAT + ring_dist * np.cos(angles),
+        lat = LAT + (ring_dist / lat_correction) * np.cos(angles),
         line = dict(width=2, color="white"),
-        opacity=0.6, hoverinfo='none'
+        opacity=0.7, hoverinfo='none'
     ))
 
     # Degree Points (0, 45, 90, 135, 180, 225, 270, 315)
@@ -171,14 +173,14 @@ with g_col2:
         rad = np.radians(d)
         fig_map.add_trace(go.Scattermapbox(
             mode = "text",
-            lon = [LON + (ring_dist + 0.0007) * np.sin(rad)],
-            lat = [LAT + (ring_dist + 0.0007) * np.cos(rad)],
+            lon = [LON + (ring_dist + 0.0006) * np.sin(rad)],
+            lat = [LAT + ((ring_dist + 0.0006) / lat_correction) * np.cos(rad)],
             text = [f"{d}°"],
-            textfont = dict(size=11, color="white", family="Arial Black"),
+            textfont = dict(size=12, color="white", family="Arial Black"),
             hoverinfo='none'
         ))
 
-    # --- 2. DYNAMIC CONTOURS (Linked to Slope) ---
+    # --- 2. DYNAMIC CONTOURS (Matching daily beach slope) ---
     base_spacing = 0.00003 / now_data['dynamic_slope'] 
     for i, color in enumerate(['#e67e22', '#d35400', '#ba4a00']):
         offset = i * base_spacing
@@ -186,28 +188,27 @@ with g_col2:
             mode = "lines",
             lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
             lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
-            line = dict(width=3-i, color=color),
-            opacity=0.9 - (i*0.2), showlegend=False, hoverinfo='none'
+            line = dict(width=1.5, color=color), # Thinner lines as requested
+            opacity=0.8 - (i*0.2), showlegend=False, hoverinfo='none'
         ))
 
-    # --- 3. THE ARROWS ---
-    # WIND: Bold Yellow Arrow from center pointing OUT
+    # --- 3. THE SURFLINE ARROWS ---
+    # WIND: Bold Yellow Arrow from center
     w_deg = now_data['wind_dir']
     fig_map.add_trace(go.Scattermapbox(
         mode = "markers",
-        lon = [LON + (ring_dist * 0.5) * np.sin(np.radians(w_deg))],
-        lat = [LAT + (ring_dist * 0.5) * np.cos(np.radians(w_deg))],
+        lon = [LON + (ring_dist * 0.45) * np.sin(np.radians(w_deg))],
+        lat = [LAT + ((ring_dist * 0.45) / lat_correction) * np.cos(np.radians(w_deg))],
         marker = dict(size=22, symbol="marker", angle=w_deg, color="#f1c40f"),
         name = "Wind"
     ))
 
-    # SWELL: Blue Paper Plane on the Ring pointing IN toward center
+    # SWELL: Blue Paper Plane on Ring pointing AT center
     s_deg = now_data['swell_wave_direction']
-    # We place it ON the ring, but rotate it +180 to point at the center
     fig_map.add_trace(go.Scattermapbox(
         mode = "markers",
         lon = [LON + ring_dist * np.sin(np.radians(s_deg))],
-        lat = [LAT + ring_dist * np.cos(np.radians(s_deg))],
+        lat = [LAT + (ring_dist / lat_correction) * np.cos(np.radians(s_deg))],
         marker = dict(size=25, symbol="airport", angle=s_deg + 180, color="#3498db"),
         name = "Swell"
     ))
@@ -220,7 +221,7 @@ with g_col2:
                 'below': 'traces', 'sourcetype': 'raster',
                 'source': ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"]
             }],
-            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.6
+            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.8
         }, showlegend = False
     )
     st.plotly_chart(fig_map, use_container_width=True)
