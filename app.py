@@ -149,15 +149,15 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. HIGH-FIDELITY COMPASS: 15° INTERNAL TICKS
+    # 3. REFINED WHITE COMPASS: PAPER AIRPLANE & CLASSIC WIND ARROW
     LAT, LON = -36.236222, 174.718222
     fig_map = go.Figure()
 
-    # --- 1. THE CIRCLE & TICKS ---
+    # --- 1. THE CIRCLE & TICKS (15° internal / 45° external labels) ---
     ring_dist = 0.0028 
     lat_correction = 1.25 
     
-    # Main White Ring
+    # Main Ring
     angles = np.linspace(0, 2*np.pi, 100)
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
@@ -167,22 +167,18 @@ with g_col2:
         opacity=0.8, hoverinfo='none'
     ))
 
-    # Tick Marks (Every 15° on the inside)
     for d in range(0, 360, 15):
         rad = np.radians(d)
-        # Inside the ring
+        # 15° internal strikes
         t_start_dist = ring_dist - 0.0003
-        t_end_dist = ring_dist
-        
         fig_map.add_trace(go.Scattermapbox(
             mode = "lines",
-            lon = [LON + t_start_dist * np.sin(rad), LON + t_end_dist * np.sin(rad)],
-            lat = [LAT + (t_start_dist / lat_correction) * np.cos(rad), LAT + (t_end_dist / lat_correction) * np.cos(rad)],
-            line = dict(width=1.5, color="white"),
-            hoverinfo='none'
+            lon = [LON + t_start_dist * np.sin(rad), LON + ring_dist * np.sin(rad)],
+            lat = [LAT + (t_start_dist / lat_correction) * np.cos(rad), LAT + (ring_dist / lat_correction) * np.cos(rad)],
+            line = dict(width=1.5, color="white"), hoverinfo='none'
         ))
         
-        # Degree Labels (Every 45° on the outside)
+        # 45° external labels
         if d % 45 == 0:
             label_dist = ring_dist + 0.0008
             fig_map.add_trace(go.Scattermapbox(
@@ -194,42 +190,66 @@ with g_col2:
                 hoverinfo='none'
             ))
 
-    # --- 2. THE WHITE WIND ARROW (From center) ---
+    # --- 2. THE WHITE WIND ARROW (Standard Rectangle + Triangle) ---
     w_deg = now_data['wind_dir']
     w_rad = np.radians(w_deg)
-    w_tip_dist = ring_dist * 0.6
-    w_tip_lon = LON + w_tip_dist * np.sin(w_rad)
-    w_tip_lat = LAT + (w_tip_dist / lat_correction) * np.cos(w_rad)
-    wl_lon = LON + (w_tip_dist * 0.7) * np.sin(w_rad - 0.2)
-    wl_lat = LAT + ((w_tip_dist * 0.7) / lat_correction) * np.cos(w_rad - 0.2)
-    wr_lon = LON + (w_tip_dist * 0.7) * np.sin(w_rad + 0.2)
-    wr_lat = LAT + ((w_tip_dist * 0.7) / lat_correction) * np.cos(w_rad + 0.2)
-
+    shaft_len = ring_dist * 0.45
+    head_len = ring_dist * 0.2
+    
+    # Shaft coordinates (Rectangle)
+    # We draw it as a thick line for simplicity, or a thin polygon
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "lines",
+        lon = [LON, LON + shaft_len * np.sin(w_rad)],
+        lat = [LAT, LAT + (shaft_len / lat_correction) * np.cos(w_rad)],
+        line = dict(width=5, color="white"),
+        name = "Wind Shaft"
+    ))
+    
+    # Arrow Head (Triangle)
+    tip_lon = LON + (shaft_len + head_len) * np.sin(w_rad)
+    tip_lat = LAT + ((shaft_len + head_len) / lat_correction) * np.cos(w_rad)
+    side_rad_l = w_rad - 0.25
+    side_rad_r = w_rad + 0.25
+    
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines", fill = "toself",
-        lon = [LON, wl_lon, w_tip_lon, wr_lon, LON],
-        lat = [LAT, wl_lat, w_tip_lat, wr_lat, LAT],
+        lon = [tip_lon, 
+               LON + shaft_len * np.sin(side_rad_l), 
+               LON + shaft_len * np.sin(side_rad_r), 
+               tip_lon],
+        lat = [tip_lat, 
+               LAT + (shaft_len / lat_correction) * np.cos(side_rad_l), 
+               LAT + (shaft_len / lat_correction) * np.cos(side_rad_r), 
+               tip_lat],
         fillcolor = "white", line = dict(width=0),
-        name = "Wind"
+        name = "Wind Head"
     ))
 
-    # --- 3. THE WHITE SWELL PAPER PLANE (On Ring pointing IN) ---
+    # --- 3. THE WHITE SWELL POINTER (Paper Airplane Style) ---
     s_deg = now_data['swell_wave_direction']
     s_rad = np.radians(s_deg)
-    p_lon = LON + ring_dist * np.sin(s_rad)
-    p_lat = LAT + (ring_dist / lat_correction) * np.cos(s_rad)
-    sl_lon = LON + (ring_dist * 1.25) * np.sin(s_rad - 0.15)
-    sl_lat = LAT + ((ring_dist * 1.25) / lat_correction) * np.cos(s_rad - 0.15)
-    sr_lon = LON + (ring_dist * 1.25) * np.sin(s_rad + 0.15)
-    sr_lat = LAT + ((ring_dist * 1.25) / lat_correction) * np.cos(s_rad + 0.15)
-    sn_lon = LON + (ring_dist * 1.1) * np.sin(s_rad)
-    sn_lat = LAT + ((ring_dist * 1.1) / lat_correction) * np.cos(s_rad)
+    # The nose sits on the ring pointing at the center
+    nose_lon = LON + ring_dist * np.sin(s_rad)
+    nose_lat = LAT + (ring_dist / lat_correction) * np.cos(s_rad)
+    
+    # Rear points (spread out further from center)
+    tail_dist = ring_dist * 1.3
+    notch_dist = ring_dist * 1.15
+    
+    tail_l_lon = LON + tail_dist * np.sin(s_rad - 0.12)
+    tail_l_lat = LAT + (tail_dist / lat_correction) * np.cos(s_rad - 0.12)
+    tail_r_lon = LON + tail_dist * np.sin(s_rad + 0.12)
+    tail_r_lat = LAT + (tail_dist / lat_correction) * np.cos(s_rad + 0.12)
+    # The "Paper Airplane" notch
+    notch_lon = LON + notch_dist * np.sin(s_rad)
+    notch_lat = LAT + (notch_dist / lat_correction) * np.cos(s_rad)
 
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines", fill = "toself",
-        lon = [p_lon, sl_lon, sn_lon, sr_lon, p_lon],
-        lat = [p_lat, sl_lat, sn_lat, sr_lat, p_lat],
-        fillcolor = "white", line = dict(width=1, color="rgba(0,0,0,0.2)"),
+        lon = [nose_lon, tail_l_lon, notch_lon, tail_r_lon, nose_lon],
+        lat = [nose_lat, tail_l_lat, notch_lat, tail_r_lat, nose_lat],
+        fillcolor = "white", line = dict(width=1.5, color="white"),
         name = "Swell"
     ))
 
