@@ -149,69 +149,85 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. HIGH-FIDELITY CIRCULAR SURFLINE COMPASS
+    # 3. BULLETPROOF MANUAL GEOMETRY COMPASS
     LAT, LON = -36.236222, 174.718222
     fig_map = go.Figure()
 
-    # --- 1. THE PERFECT CIRCLE DIAL (Mercator Corrected) ---
-    # To make a circle look round at -36 deg Lat, we multiply Lat by 1.25
-    ring_dist = 0.0028  # Reduced by 20% (from 0.0035)
+    # --- 1. THE PERFECT CIRCLE (Mercator Corrected) ---
+    ring_dist = 0.0025  # 20% smaller than previous
     lat_correction = 1.25 
-    angles = np.linspace(0, 2*np.pi, 200)
+    angles = np.linspace(0, 2*np.pi, 100)
     
-    # Main White Ring
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
         lon = LON + ring_dist * np.sin(angles),
         lat = LAT + (ring_dist / lat_correction) * np.cos(angles),
-        line = dict(width=2, color="white"),
-        opacity=0.7, hoverinfo='none'
+        line = dict(width=3, color="white"),
+        opacity=0.8, hoverinfo='none'
     ))
 
-    # Degree Points (0, 45, 90, 135, 180, 225, 270, 315)
-    for d in range(0, 360, 45):
+    # --- 2. BOLD WIND ARROW (Manual Polygon) ---
+    w_deg = now_data['wind_dir']
+    w_rad = np.radians(w_deg)
+    # Arrow head coordinates
+    w_tip_lon = LON + (ring_dist * 0.6) * np.sin(w_rad)
+    w_tip_lat = LAT + ((ring_dist * 0.6) / lat_correction) * np.cos(w_rad)
+    
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "lines",
+        fill = "toself",
+        lon = [LON, w_tip_lon, LON + (ring_dist*0.1)*np.sin(w_rad+2.5), LON],
+        lat = [LAT, w_tip_lat, LAT + ((ring_dist*0.1)/lat_correction)*np.cos(w_rad+2.5), LAT],
+        fillcolor = "#f1c40f",
+        line = dict(width=0),
+        name = "Wind"
+    ))
+
+    # --- 3. SWELL PAPER PLANE (Manual Polygon) ---
+    s_deg = now_data['swell_wave_direction']
+    s_rad = np.radians(s_deg)
+    # Point on the ring
+    p_lon = LON + ring_dist * np.sin(s_rad)
+    p_lat = LAT + (ring_dist / lat_correction) * np.cos(s_rad)
+    
+    # Paper plane wings (pointing toward center)
+    wing_l_lon = LON + (ring_dist * 1.2) * np.sin(s_rad - 0.15)
+    wing_l_lat = LAT + ((ring_dist * 1.2) / lat_correction) * np.cos(s_rad - 0.15)
+    wing_r_lon = LON + (ring_dist * 1.2) * np.sin(s_rad + 0.15)
+    wing_r_lat = LAT + ((ring_dist * 1.2) / lat_correction) * np.cos(s_rad + 0.15)
+
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "lines",
+        fill = "toself",
+        lon = [p_lon, wing_l_lon, LON + (ring_dist*1.05)*np.sin(s_rad), wing_r_lon, p_lon],
+        lat = [p_lat, wing_l_lat, LAT + ((ring_dist*1.05)/lat_correction)*np.cos(s_rad), wing_r_lat, p_lat],
+        fillcolor = "#3498db",
+        line = dict(width=1, color="white"),
+        name = "Swell"
+    ))
+
+    # --- 4. DEGREE TICK MARKS ---
+    for d in [0, 90, 180, 270]:
         rad = np.radians(d)
         fig_map.add_trace(go.Scattermapbox(
             mode = "text",
-            lon = [LON + (ring_dist + 0.0006) * np.sin(rad)],
-            lat = [LAT + ((ring_dist + 0.0006) / lat_correction) * np.cos(rad)],
+            lon = [LON + (ring_dist + 0.0008) * np.sin(rad)],
+            lat = [LAT + ((ring_dist + 0.0008) / lat_correction) * np.cos(rad)],
             text = [f"{d}°"],
-            textfont = dict(size=12, color="white", family="Arial Black"),
-            hoverinfo='none'
+            textfont = dict(size=14, color="white", family="Arial Black")
         ))
 
-    # --- 2. DYNAMIC CONTOURS (Matching daily beach slope) ---
+    # --- 5. DYNAMIC CONTOURS ---
     base_spacing = 0.00003 / now_data['dynamic_slope'] 
-    for i, color in enumerate(['#e67e22', '#d35400', '#ba4a00']):
+    for i, color in enumerate(['#e67e22', '#d35400']):
         offset = i * base_spacing
         fig_map.add_trace(go.Scattermapbox(
             mode = "lines",
             lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
             lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
-            line = dict(width=1.5, color=color), # Thinner lines as requested
-            opacity=0.8 - (i*0.2), showlegend=False, hoverinfo='none'
+            line = dict(width=2, color=color),
+            opacity=0.6, showlegend=False
         ))
-
-    # --- 3. THE SURFLINE ARROWS ---
-    # WIND: Bold Yellow Arrow from center
-    w_deg = now_data['wind_dir']
-    fig_map.add_trace(go.Scattermapbox(
-        mode = "markers",
-        lon = [LON + (ring_dist * 0.45) * np.sin(np.radians(w_deg))],
-        lat = [LAT + ((ring_dist * 0.45) / lat_correction) * np.cos(np.radians(w_deg))],
-        marker = dict(size=22, symbol="marker", angle=w_deg, color="#f1c40f"),
-        name = "Wind"
-    ))
-
-    # SWELL: Blue Paper Plane on Ring pointing AT center
-    s_deg = now_data['swell_wave_direction']
-    fig_map.add_trace(go.Scattermapbox(
-        mode = "markers",
-        lon = [LON + ring_dist * np.sin(np.radians(s_deg))],
-        lat = [LAT + (ring_dist / lat_correction) * np.cos(np.radians(s_deg))],
-        marker = dict(size=25, symbol="airport", angle=s_deg + 180, color="#3498db"),
-        name = "Swell"
-    ))
 
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0}, height = 500,
@@ -221,7 +237,7 @@ with g_col2:
                 'below': 'traces', 'sourcetype': 'raster',
                 'source': ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"]
             }],
-            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.8
+            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.6
         }, showlegend = False
     )
     st.plotly_chart(fig_map, use_container_width=True)
