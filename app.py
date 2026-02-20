@@ -149,12 +149,36 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. THE HIGH-RES SATELLITE MAP
-    # Fixed Coordinates for your specific pin
+    # 3. THE DYNAMIC SATELLITE MAP
     LAT, LON = -36.236222, 174.718222
     swell_len, wind_len = 0.006, 0.005
 
     fig_map = go.Figure()
+
+    # --- DYNAMIC CONTOURS LINKED TO SLOPE ---
+    # Higher slope = smaller spacing (tighter lines)
+    # We use the inverse of the slope to determine visual spread
+    base_spacing = 0.00002 / now_data['dynamic_slope'] 
+    
+    contours = [
+        {'mult': 0, 'width': 2.0, 'color': '#e67e22', 'op': 1.0}, # Waterline/Ledge
+        {'mult': 1, 'width': 1.2, 'color': '#d35400', 'op': 0.7}, # Mid-slope
+        {'mult': 2, 'width': 0.8, 'color': '#ba4a00', 'op': 0.4}  # Deep edge
+    ]
+
+    for c in contours:
+        offset = c['mult'] * base_spacing
+        fig_map.add_trace(go.Scattermapbox(
+            mode = "lines",
+            # Lines trace the shore; offset moves them "seaward"
+            lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
+            lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
+            line = dict(width=c['width'], color=c['color']),
+            opacity=c['op'],
+            showlegend=False,
+            hoverinfo='text',
+            text=f"Slope Gradient: {now_data['dynamic_slope']:.4f}"
+        ))
 
     # Swell Vector
     s_dx = swell_len * np.sin(np.radians(now_data['swell_wave_direction']))
@@ -174,27 +198,15 @@ with g_col2:
         line = dict(width=4, color="#f1c40f"), name = "Wind"
     ))
 
-    # Ledge Contour (Orange)
-    fig_map.add_trace(go.Scattermapbox(
-        mode = "lines", lon = [174.715, 174.718, 174.722, 174.726],
-        lat = [-36.233, -36.236, -36.239, -36.242],
-        line = dict(width=4, color='#e67e22'), name = "Ledge"
-    ))
-
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0}, height = 450,
         mapbox = {
             'style': "white-bg",
             'layers': [{
-                'below': 'traces', 
-                'sourcetype': 'raster',
-                'source': [
-                    # Switched to Esri World Imagery for much higher detail/zoom capability
-                    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                ]
+                'below': 'traces', 'sourcetype': 'raster',
+                'source': ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"]
             }],
-            'center': {'lon': LON, 'lat': LAT}, 
-            'zoom': 15.8  # Tighter zoom to show the ledge detail
+            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15.8
         }, showlegend = False
     )
     st.plotly_chart(fig_map, use_container_width=True)
