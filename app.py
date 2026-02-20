@@ -149,75 +149,98 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. BULLETPROOF MANUAL GEOMETRY COMPASS
+    # 3. HIGH-CONTRAST WHITE COMPASS
     LAT, LON = -36.236222, 174.718222
     fig_map = go.Figure()
 
-    # --- 1. THE PERFECT CIRCLE (Mercator Corrected) ---
-    ring_dist = 0.0025  # 20% smaller than previous
+    # --- 1. THE CIRCLE & TICK MARKS ---
+    ring_dist = 0.0028 
     lat_correction = 1.25 
-    angles = np.linspace(0, 2*np.pi, 100)
     
+    # Main White Ring
+    angles = np.linspace(0, 2*np.pi, 100)
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines",
         lon = LON + ring_dist * np.sin(angles),
         lat = LAT + (ring_dist / lat_correction) * np.cos(angles),
-        line = dict(width=3, color="white"),
+        line = dict(width=2, color="white"),
         opacity=0.8, hoverinfo='none'
     ))
 
-    # --- 2. BOLD WIND ARROW (Manual Polygon) ---
+    # Tick Marks and Labels
+    # We add a small line at every 45 degrees
+    for d in range(0, 360, 45):
+        rad = np.radians(d)
+        # Tick line points
+        t_start_dist = ring_dist - 0.0002
+        t_end_dist = ring_dist + 0.0002
+        
+        fig_map.add_trace(go.Scattermapbox(
+            mode = "lines",
+            lon = [LON + t_start_dist * np.sin(rad), LON + t_end_dist * np.sin(rad)],
+            lat = [LAT + (t_start_dist / lat_correction) * np.cos(rad), LAT + (t_end_dist / lat_correction) * np.cos(rad)],
+            line = dict(width=2, color="white"),
+            hoverinfo='none'
+        ))
+        
+        # Degree Labels (placed slightly above the ticks)
+        if d in [0, 90, 180, 270]:
+            label_dist = ring_dist + 0.0008
+            fig_map.add_trace(go.Scattermapbox(
+                mode = "text",
+                lon = [LON + label_dist * np.sin(rad)],
+                lat = [LAT + (label_dist / lat_correction) * np.cos(rad)],
+                text = [f"{d}°"],
+                textfont = dict(size=13, color="white", family="Arial Black"),
+                hoverinfo='none'
+            ))
+
+    # --- 2. THE WHITE WIND ARROW (From center) ---
     w_deg = now_data['wind_dir']
     w_rad = np.radians(w_deg)
-    # Arrow head coordinates
-    w_tip_lon = LON + (ring_dist * 0.6) * np.sin(w_rad)
-    w_tip_lat = LAT + ((ring_dist * 0.6) / lat_correction) * np.cos(w_rad)
+    w_tip_dist = ring_dist * 0.6
     
+    # Triangle head coordinates
+    w_tip_lon = LON + w_tip_dist * np.sin(w_rad)
+    w_tip_lat = LAT + (w_tip_dist / lat_correction) * np.cos(w_rad)
+    # Wing points
+    wl_lon = LON + (w_tip_dist * 0.7) * np.sin(w_rad - 0.2)
+    wl_lat = LAT + ((w_tip_dist * 0.7) / lat_correction) * np.cos(w_rad - 0.2)
+    wr_lon = LON + (w_tip_dist * 0.7) * np.sin(w_rad + 0.2)
+    wr_lat = LAT + ((w_tip_dist * 0.7) / lat_correction) * np.cos(w_rad + 0.2)
+
     fig_map.add_trace(go.Scattermapbox(
-        mode = "lines",
-        fill = "toself",
-        lon = [LON, w_tip_lon, LON + (ring_dist*0.1)*np.sin(w_rad+2.5), LON],
-        lat = [LAT, w_tip_lat, LAT + ((ring_dist*0.1)/lat_correction)*np.cos(w_rad+2.5), LAT],
-        fillcolor = "#f1c40f",
-        line = dict(width=0),
+        mode = "lines", fill = "toself",
+        lon = [LON, wl_lon, w_tip_lon, wr_lon, LON],
+        lat = [LAT, wl_lat, w_tip_lat, wr_lat, LAT],
+        fillcolor = "white", line = dict(width=0),
         name = "Wind"
     ))
 
-    # --- 3. SWELL PAPER PLANE (Manual Polygon) ---
+    # --- 3. THE WHITE SWELL PAPER PLANE (On Ring pointing IN) ---
     s_deg = now_data['swell_wave_direction']
     s_rad = np.radians(s_deg)
-    # Point on the ring
     p_lon = LON + ring_dist * np.sin(s_rad)
     p_lat = LAT + (ring_dist / lat_correction) * np.cos(s_rad)
     
-    # Paper plane wings (pointing toward center)
-    wing_l_lon = LON + (ring_dist * 1.2) * np.sin(s_rad - 0.15)
-    wing_l_lat = LAT + ((ring_dist * 1.2) / lat_correction) * np.cos(s_rad - 0.15)
-    wing_r_lon = LON + (ring_dist * 1.2) * np.sin(s_rad + 0.15)
-    wing_r_lat = LAT + ((ring_dist * 1.2) / lat_correction) * np.cos(s_rad + 0.15)
+    # Wing points for paper plane (external to ring)
+    sl_lon = LON + (ring_dist * 1.25) * np.sin(s_rad - 0.15)
+    sl_lat = LAT + ((ring_dist * 1.25) / lat_correction) * np.cos(s_rad - 0.15)
+    sr_lon = LON + (ring_dist * 1.25) * np.sin(s_rad + 0.15)
+    sr_lat = LAT + ((ring_dist * 1.25) / lat_correction) * np.cos(s_rad + 0.15)
+    # Rear notch
+    sn_lon = LON + (ring_dist * 1.1) * np.sin(s_rad)
+    sn_lat = LAT + ((ring_dist * 1.1) / lat_correction) * np.cos(s_rad)
 
     fig_map.add_trace(go.Scattermapbox(
-        mode = "lines",
-        fill = "toself",
-        lon = [p_lon, wing_l_lon, LON + (ring_dist*1.05)*np.sin(s_rad), wing_r_lon, p_lon],
-        lat = [p_lat, wing_l_lat, LAT + ((ring_dist*1.05)/lat_correction)*np.cos(s_rad), wing_r_lat, p_lat],
-        fillcolor = "#3498db",
-        line = dict(width=1, color="white"),
+        mode = "lines", fill = "toself",
+        lon = [p_lon, sl_lon, sn_lon, sr_lon, p_lon],
+        lat = [p_lat, sl_lat, sn_lat, sr_lat, p_lat],
+        fillcolor = "white", line = dict(width=1, color="rgba(0,0,0,0.2)"),
         name = "Swell"
     ))
 
-    # --- 4. DEGREE TICK MARKS ---
-    for d in [0, 90, 180, 270]:
-        rad = np.radians(d)
-        fig_map.add_trace(go.Scattermapbox(
-            mode = "text",
-            lon = [LON + (ring_dist + 0.0008) * np.sin(rad)],
-            lat = [LAT + ((ring_dist + 0.0008) / lat_correction) * np.cos(rad)],
-            text = [f"{d}°"],
-            textfont = dict(size=14, color="white", family="Arial Black")
-        ))
-
-    # --- 5. DYNAMIC CONTOURS ---
+    # --- 4. DYNAMIC CONTOURS ---
     base_spacing = 0.00003 / now_data['dynamic_slope'] 
     for i, color in enumerate(['#e67e22', '#d35400']):
         offset = i * base_spacing
@@ -225,7 +248,7 @@ with g_col2:
             mode = "lines",
             lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
             lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
-            line = dict(width=2, color=color),
+            line = dict(width=1, color=color),
             opacity=0.6, showlegend=False
         ))
 
