@@ -149,7 +149,8 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. THE SATELLITE MAP
+    # 3. THE HIGH-RES SATELLITE MAP
+    # Fixed Coordinates for your specific pin
     LAT, LON = -36.236222, 174.718222
     swell_len, wind_len = 0.006, 0.005
 
@@ -173,7 +174,7 @@ with g_col2:
         line = dict(width=4, color="#f1c40f"), name = "Wind"
     ))
 
-    # Ledge Contour
+    # Ledge Contour (Orange)
     fig_map.add_trace(go.Scattermapbox(
         mode = "lines", lon = [174.715, 174.718, 174.722, 174.726],
         lat = [-36.233, -36.236, -36.239, -36.242],
@@ -185,10 +186,15 @@ with g_col2:
         mapbox = {
             'style': "white-bg",
             'layers': [{
-                'below': 'traces', 'sourcetype': 'raster',
-                'source': ["https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}"]
+                'below': 'traces', 
+                'sourcetype': 'raster',
+                'source': [
+                    # Switched to Esri World Imagery for much higher detail/zoom capability
+                    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                ]
             }],
-            'center': {'lon': LON, 'lat': LAT}, 'zoom': 15
+            'center': {'lon': LON, 'lat': LAT}, 
+            'zoom': 15.8  # Tighter zoom to show the ledge detail
         }, showlegend = False
     )
     st.plotly_chart(fig_map, use_container_width=True)
