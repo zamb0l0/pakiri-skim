@@ -149,54 +149,53 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. THE DYNAMIC SATELLITE MAP
+    # 3. THE SURFLINE-STYLE SATELLITE COMPASS
     LAT, LON = -36.236222, 174.718222
-    swell_len, wind_len = 0.006, 0.005
-
+    
     fig_map = go.Figure()
 
     # --- DYNAMIC CONTOURS LINKED TO SLOPE ---
-    # Higher slope = smaller spacing (tighter lines)
-    # We use the inverse of the slope to determine visual spread
     base_spacing = 0.00002 / now_data['dynamic_slope'] 
-    
     contours = [
-        {'mult': 0, 'width': 2.0, 'color': '#e67e22', 'op': 1.0}, # Waterline/Ledge
-        {'mult': 1, 'width': 1.2, 'color': '#d35400', 'op': 0.7}, # Mid-slope
-        {'mult': 2, 'width': 0.8, 'color': '#ba4a00', 'op': 0.4}  # Deep edge
+        {'mult': 0, 'width': 2.0, 'color': '#e67e22', 'op': 1.0}, # Waterline
+        {'mult': 1, 'width': 1.0, 'color': '#d35400', 'op': 0.6}, # Mid
+        {'mult': 2, 'width': 0.6, 'color': '#ba4a00', 'op': 0.3}  # Deep
     ]
 
     for c in contours:
         offset = c['mult'] * base_spacing
         fig_map.add_trace(go.Scattermapbox(
             mode = "lines",
-            # Lines trace the shore; offset moves them "seaward"
             lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
             lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
             line = dict(width=c['width'], color=c['color']),
-            opacity=c['op'],
-            showlegend=False,
-            hoverinfo='text',
-            text=f"Slope Gradient: {now_data['dynamic_slope']:.4f}"
+            opacity=c['op'], showlegend=False, hoverinfo='none'
         ))
 
-    # Swell Vector
-    s_dx = swell_len * np.sin(np.radians(now_data['swell_wave_direction']))
-    s_dy = swell_len * np.cos(np.radians(now_data['swell_wave_direction']))
-    fig_map.add_trace(go.Scattermapbox(
-        mode = "lines+markers", lon = [LON + s_dx, LON], lat = [LAT + s_dy, LAT],
-        marker = dict(size=12, symbol="triangle", color="#3498db"),
-        line = dict(width=6, color="#3498db"), name = "Swell"
-    ))
+    # --- SURFLINE COMPASS ARROWS ---
+    # We use annotations with arrows to mimic the forecast UI
+    
+    # Swell Arrow (Solid Blue)
+    fig_map.add_annotation(
+        dict(
+            ax=LON, ay=LAT, # Start point
+            x=LON - (0.005 * np.sin(np.radians(now_data['swell_wave_direction']))), # End point
+            y=LAT - (0.005 * np.cos(np.radians(now_data['swell_wave_direction']))),
+            xref="lon", yref="lat", axref="lon", ayref="lat",
+            showarrow=True, arrowhead=3, arrowsize=2, arrowwidth=5, arrowcolor="#3498db"
+        )
+    )
 
-    # Wind Vector
-    w_dx = wind_len * np.sin(np.radians(now_data['wind_dir']))
-    w_dy = wind_len * np.cos(np.radians(now_data['wind_dir']))
-    fig_map.add_trace(go.Scattermapbox(
-        mode = "lines+markers", lon = [LON + w_dx, LON], lat = [LAT + w_dy, LAT],
-        marker = dict(size=10, symbol="circle", color="#f1c40f"),
-        line = dict(width=4, color="#f1c40f"), name = "Wind"
-    ))
+    # Wind Arrow (Solid Yellow)
+    fig_map.add_annotation(
+        dict(
+            ax=LON, ay=LAT,
+            x=LON - (0.004 * np.sin(np.radians(now_data['wind_dir']))),
+            y=LAT - (0.004 * np.cos(np.radians(now_data['wind_dir']))),
+            xref="lon", yref="lat", axref="lon", ayref="lat",
+            showarrow=True, arrowhead=2, arrowsize=1.5, arrowwidth=3, arrowcolor="#f1c40f"
+        )
+    )
 
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0}, height = 450,
