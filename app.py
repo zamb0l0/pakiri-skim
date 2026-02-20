@@ -11,8 +11,8 @@ st.set_page_config(page_title="Pakiri Ledge Command Center", page_icon="🌊", l
 # --- GLOBAL PAGE TITLE ---
 st.markdown(f"""
 <div style="background-color: #2d3436; color: white; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 30px; border: 2px solid #000;">
-    <h1 style="margin: 0; font-size: 2.2rem; letter-spacing: 3px; text-transform: uppercase; font-weight: 900;">📍 SKIM PAKIRI</h1>
-    <p style="margin: 8px 0 0 0; font-family: monospace; font-size: 1rem; opacity: 0.9; letter-spacing: 1px;">36°14'10.4"S 174°43'05.6"E</p>
+    <h1 style="margin: 0; font-size: 2.2rem; letter-spacing: 3px; text-transform: uppercase; font-weight: 900;"> SKIM PAKIRI</h1>
+    <p style="margin: 8px 0 0 0; font-family: monospace; font-size: 1rem; opacity: 0.9; letter-spacing: 1px;">📍36°14'10.4"S 174°43'05.6"E</p>
 </div>
 """, unsafe_allow_html=True)
 
