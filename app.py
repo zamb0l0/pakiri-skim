@@ -154,48 +154,52 @@ with g_col2:
     
     fig_map = go.Figure()
 
-    # --- DYNAMIC CONTOURS LINKED TO SLOPE ---
-    base_spacing = 0.00002 / now_data['dynamic_slope'] 
-    contours = [
-        {'mult': 0, 'width': 2.0, 'color': '#e67e22', 'op': 1.0}, # Waterline
-        {'mult': 1, 'width': 1.0, 'color': '#d35400', 'op': 0.6}, # Mid
-        {'mult': 2, 'width': 0.6, 'color': '#ba4a00', 'op': 0.3}  # Deep
-    ]
+    # --- 1. COMPASS RING (White Circle) ---
+    # Creates a visual 'dial' around the center point
+    ring_angles = np.linspace(0, 2*np.pi, 100)
+    ring_dist = 0.004 # Radius of the ring
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "lines",
+        lon = LON + ring_dist * np.sin(ring_angles),
+        lat = LAT + ring_dist * np.cos(ring_angles),
+        line = dict(width=2, color="white"),
+        opacity=0.5, hoverinfo='none'
+    ))
 
-    for c in contours:
-        offset = c['mult'] * base_spacing
+    # --- 2. DYNAMIC CONTOURS (Linked to Slope) ---
+    base_spacing = 0.00002 / now_data['dynamic_slope'] 
+    for i, color in enumerate(['#e67e22', '#d35400', '#ba4a00']):
+        offset = i * base_spacing
         fig_map.add_trace(go.Scattermapbox(
             mode = "lines",
             lon = [174.715 + offset, 174.718 + offset, 174.722 + offset, 174.726 + offset],
             lat = [-36.233 - offset, -36.236 - offset, -36.239 - offset, -36.242 - offset],
-            line = dict(width=c['width'], color=c['color']),
-            opacity=c['op'], showlegend=False, hoverinfo='none'
+            line = dict(width=2-i*0.5, color=color),
+            opacity=1.0 - (i*0.3), showlegend=False, hoverinfo='none'
         ))
 
-    # --- SURFLINE COMPASS ARROWS ---
-    # We use annotations with arrows to mimic the forecast UI
-    
-    # Swell Arrow (Solid Blue)
-    fig_map.add_annotation(
-        dict(
-            ax=LON, ay=LAT, # Start point
-            x=LON - (0.005 * np.sin(np.radians(now_data['swell_wave_direction']))), # End point
-            y=LAT - (0.005 * np.cos(np.radians(now_data['swell_wave_direction']))),
-            xref="lon", yref="lat", axref="lon", ayref="lat",
-            showarrow=True, arrowhead=3, arrowsize=2, arrowwidth=5, arrowcolor="#3498db"
-        )
-    )
+    # --- 3. SURFLINE ARROWS (Scattermapbox Markers) ---
+    # Swell Arrow
+    s_angle = now_data['swell_wave_direction']
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "markers",
+        lon = [LON - 0.0035 * np.sin(np.radians(s_angle))],
+        lat = [LAT - 0.0035 * np.cos(np.radians(s_angle))],
+        marker = dict(size=25, symbol="marker", angle=s_angle, color="#3498db"),
+        name = "Swell Dir",
+        text = f"Swell: {s_angle}°", hoverinfo="text"
+    ))
 
-    # Wind Arrow (Solid Yellow)
-    fig_map.add_annotation(
-        dict(
-            ax=LON, ay=LAT,
-            x=LON - (0.004 * np.sin(np.radians(now_data['wind_dir']))),
-            y=LAT - (0.004 * np.cos(np.radians(now_data['wind_dir']))),
-            xref="lon", yref="lat", axref="lon", ayref="lat",
-            showarrow=True, arrowhead=2, arrowsize=1.5, arrowwidth=3, arrowcolor="#f1c40f"
-        )
-    )
+    # Wind Arrow
+    w_angle = now_data['wind_dir']
+    fig_map.add_trace(go.Scattermapbox(
+        mode = "markers",
+        lon = [LON - 0.0025 * np.sin(np.radians(w_angle))],
+        lat = [LAT - 0.0025 * np.cos(np.radians(w_angle))],
+        marker = dict(size=18, symbol="triangle", angle=w_angle, color="#f1c40f"),
+        name = "Wind Dir",
+        text = f"Wind: {w_angle}°", hoverinfo="text"
+    ))
 
     fig_map.update_layout(
         margin = {'l':0,'t':0,'b':0,'r':0}, height = 450,
