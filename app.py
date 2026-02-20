@@ -149,11 +149,11 @@ with g_col1:
     """, unsafe_allow_html=True)
 
 with g_col2:
-    # 3. HIGH-CONTRAST WHITE COMPASS
+    # 3. HIGH-FIDELITY COMPASS: 15° INTERNAL TICKS
     LAT, LON = -36.236222, 174.718222
     fig_map = go.Figure()
 
-    # --- 1. THE CIRCLE & TICK MARKS ---
+    # --- 1. THE CIRCLE & TICKS ---
     ring_dist = 0.0028 
     lat_correction = 1.25 
     
@@ -167,31 +167,30 @@ with g_col2:
         opacity=0.8, hoverinfo='none'
     ))
 
-    # Tick Marks and Labels
-    # We add a small line at every 45 degrees
-    for d in range(0, 360, 45):
+    # Tick Marks (Every 15° on the inside)
+    for d in range(0, 360, 15):
         rad = np.radians(d)
-        # Tick line points
-        t_start_dist = ring_dist - 0.0002
-        t_end_dist = ring_dist + 0.0002
+        # Inside the ring
+        t_start_dist = ring_dist - 0.0003
+        t_end_dist = ring_dist
         
         fig_map.add_trace(go.Scattermapbox(
             mode = "lines",
             lon = [LON + t_start_dist * np.sin(rad), LON + t_end_dist * np.sin(rad)],
             lat = [LAT + (t_start_dist / lat_correction) * np.cos(rad), LAT + (t_end_dist / lat_correction) * np.cos(rad)],
-            line = dict(width=2, color="white"),
+            line = dict(width=1.5, color="white"),
             hoverinfo='none'
         ))
         
-        # Degree Labels (placed slightly above the ticks)
-        if d in [0, 90, 180, 270]:
+        # Degree Labels (Every 45° on the outside)
+        if d % 45 == 0:
             label_dist = ring_dist + 0.0008
             fig_map.add_trace(go.Scattermapbox(
                 mode = "text",
                 lon = [LON + label_dist * np.sin(rad)],
                 lat = [LAT + (label_dist / lat_correction) * np.cos(rad)],
                 text = [f"{d}°"],
-                textfont = dict(size=13, color="white", family="Arial Black"),
+                textfont = dict(size=12, color="white", family="Arial Black"),
                 hoverinfo='none'
             ))
 
@@ -199,11 +198,8 @@ with g_col2:
     w_deg = now_data['wind_dir']
     w_rad = np.radians(w_deg)
     w_tip_dist = ring_dist * 0.6
-    
-    # Triangle head coordinates
     w_tip_lon = LON + w_tip_dist * np.sin(w_rad)
     w_tip_lat = LAT + (w_tip_dist / lat_correction) * np.cos(w_rad)
-    # Wing points
     wl_lon = LON + (w_tip_dist * 0.7) * np.sin(w_rad - 0.2)
     wl_lat = LAT + ((w_tip_dist * 0.7) / lat_correction) * np.cos(w_rad - 0.2)
     wr_lon = LON + (w_tip_dist * 0.7) * np.sin(w_rad + 0.2)
@@ -222,13 +218,10 @@ with g_col2:
     s_rad = np.radians(s_deg)
     p_lon = LON + ring_dist * np.sin(s_rad)
     p_lat = LAT + (ring_dist / lat_correction) * np.cos(s_rad)
-    
-    # Wing points for paper plane (external to ring)
     sl_lon = LON + (ring_dist * 1.25) * np.sin(s_rad - 0.15)
     sl_lat = LAT + ((ring_dist * 1.25) / lat_correction) * np.cos(s_rad - 0.15)
     sr_lon = LON + (ring_dist * 1.25) * np.sin(s_rad + 0.15)
     sr_lat = LAT + ((ring_dist * 1.25) / lat_correction) * np.cos(s_rad + 0.15)
-    # Rear notch
     sn_lon = LON + (ring_dist * 1.1) * np.sin(s_rad)
     sn_lat = LAT + ((ring_dist * 1.1) / lat_correction) * np.cos(s_rad)
 
